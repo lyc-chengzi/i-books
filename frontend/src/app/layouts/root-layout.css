@@ -1,0 +1,153 @@
+/* RootLayout scoped styles */
+
+.appShell {
+  background: transparent;
+}
+
+.appSider {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.66) 100%
+  ) !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.appHeader {
+  background: rgba(255, 255, 255, 0.74) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.appLogo {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background:
+    radial-gradient(
+      12px 12px at 30% 30%,
+      rgba(255, 255, 255, 0.85),
+      rgba(255, 255, 255, 0) 60%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(217, 58, 47, 1) 0%,
+      rgba(255, 99, 72, 1) 45%,
+      rgba(217, 58, 47, 1) 100%
+    );
+  box-shadow: 0 10px 22px rgba(217, 58, 47, 0.24);
+}
+
+.appContent {
+  padding: 18px;
+}
+
+.appContentInner {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Main center panel (rounded page boundary) */
+.appMainPanel {
+  border-radius: var(--app-radius-lg);
+  overflow: hidden;
+  padding: 0; /* user preference: no padding */
+}
+
+@media (max-width: 900px) {
+  .appContent {
+    padding: 14px;
+  }
+
+  .appMainPanel {
+    border-radius: var(--app-radius-md);
+  }
+}
+
+/* Sider menu as large cards */
+.rootSiderMenu {
+  padding: 10px;
+  background: transparent !important;
+  border-inline-end: none !important;
+}
+
+.rootSiderMenu .ant-menu-item {
+  height: 92px;
+  line-height: normal;
+  border-radius: 16px;
+  margin: 10px 6px;
+  padding: 10px 10px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition:
+    transform 160ms ease,
+    box-shadow 220ms ease,
+    background-color 220ms ease,
+    border-color 220ms ease;
+}
+
+.rootSiderMenu .ant-menu-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.12);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Remove the default selected indicator bar (it conflicts with card style) */
+.rootSiderMenu .ant-menu-item::after {
+  display: none;
+}
+
+.rootSiderMenu .ant-menu-item.ant-menu-item-selected {
+  color: rgba(0, 0, 0, 0.92);
+  background:
+    radial-gradient(
+      260px 140px at 10% 20%,
+      rgba(217, 58, 47, 0.18),
+      rgba(217, 58, 47, 0) 60%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.78) 0%,
+      rgba(255, 255, 255, 0.62) 100%
+    );
+  border-color: rgba(217, 58, 47, 0.28);
+  box-shadow: 0 16px 36px rgba(217, 58, 47, 0.12), 0 14px 30px rgba(0, 0, 0, 0.1);
+}
+
+.rootSiderMenu .ant-menu-item-icon {
+  margin-inline-end: 0 !important;
+  font-size: 28px !important;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.rootSiderMenu .ant-menu-item.ant-menu-item-selected .ant-menu-item-icon {
+  background: rgba(217, 58, 47, 0.1);
+  border-color: rgba(217, 58, 47, 0.22);
+}
+
+.rootSiderMenu .ant-menu-title-content {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.1;
+  text-align: center;
+  padding: 0;
+  margin: 0 !important;
+}

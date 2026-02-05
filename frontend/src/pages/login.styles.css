@@ -1,0 +1,13 @@
+/* Login page scoped styles */
+
+.authPage {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.authCard {
+  width: 380px;
+  max-width: calc(100vw - 40px);
+}

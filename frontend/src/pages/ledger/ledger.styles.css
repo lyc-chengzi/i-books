@@ -1,0 +1,61 @@
+/* Ledger pages domain styles (all pages under /ledger) */
+
+.tx-transactions-table .ant-table-tbody > tr > td {
+  transition: background-color 0.2s ease;
+}
+
+.tx-transactions-table .ant-table-tbody > tr.tx-row-zebra > td {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.tx-transactions-table .ant-table-tbody > tr.tx-row-flash > td {
+  background: #e6f4ff !important;
+}
+
+.tx-transactions-table .ant-table-tbody > tr.tx-row-selected > td {
+  background: #bae0ff !important;
+}
+
+.tx-transactions-table .ant-table-tbody > tr.tx-row-group > td {
+  background: rgba(217, 58, 47, 0.07) !important;
+  font-weight: 650;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+}
+
+.tx-transactions-table .ant-table-tbody > tr.tx-row-group:hover > td {
+  background: rgba(217, 58, 47, 0.12) !important;
+}
+
+.ledger-floating-actions {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 100;
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.tx-category-leaf {
+  color: #222222;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(34, 34, 34, 0.08);
+}
+
+.tx-amount-large {
+  color: #b58900;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(181, 137, 0, 0.08);
+}

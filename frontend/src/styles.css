@@ -1,0 +1,141 @@
+/*
+  Global styles / visual language
+
+  Goals:
+  - Modern, refined look (soft radius, subtle shadows)
+  - Glassmorphism for main containers (semi-transparent + blur)
+  - Consistent motion (hover/press transitions) with reduced-motion support
+*/
+
+:root {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+
+  --app-radius-sm: 10px;
+  --app-radius-md: 14px;
+  --app-radius-lg: 18px;
+
+  --app-shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.08);
+  --app-shadow-md: 0 10px 30px rgba(0, 0, 0, 0.10);
+
+  --app-glass-bg: rgba(255, 255, 255, 0.72);
+  --app-glass-bg-strong: rgba(255, 255, 255, 0.86);
+  --app-glass-border: rgba(255, 255, 255, 0.38);
+  --app-glass-border-strong: rgba(0, 0, 0, 0.06);
+
+  --app-text: rgba(0, 0, 0, 0.88);
+  --app-text-secondary: rgba(0, 0, 0, 0.55);
+  --app-divider: rgba(0, 0, 0, 0.06);
+
+  /* Accent is driven by Antd token colorPrimary (see ConfigProvider),
+     this is only used in pure CSS gradients.
+  */
+  --app-accent: #d93a2f;
+}
+
+html {
+  color: var(--app-text);
+  background: #f4f6fb;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #f4f6fb;
+}
+
+/* Background layers (subtle gradient + blur blobs) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(1200px 800px at 12% 8%, rgba(217, 58, 47, 0.14), rgba(217, 58, 47, 0) 60%),
+    radial-gradient(900px 700px at 85% 18%, rgba(24, 144, 255, 0.12), rgba(24, 144, 255, 0) 55%),
+    radial-gradient(900px 700px at 65% 90%, rgba(82, 196, 26, 0.08), rgba(82, 196, 26, 0) 55%),
+    linear-gradient(180deg, #f7f9ff 0%, #f4f6fb 70%, #f3f5fa 100%);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(1px 1px at 30% 20%, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0) 60%);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Shared motion primitives */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+.appGlass {
+  background: var(--app-glass-bg);
+  border: 1px solid var(--app-glass-border);
+  box-shadow: var(--app-shadow-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.appGlass--strong {
+  background: var(--app-glass-bg-strong);
+  border-color: var(--app-glass-border-strong);
+}
+
+.appCard {
+  border-radius: var(--app-radius-lg);
+}
+
+/* Antd Card: make it look more refined by default */
+.ant-card {
+  border-radius: var(--app-radius-lg);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.10);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.ant-btn {
+  transition: transform 120ms ease, box-shadow 200ms ease;
+}
+
+.ant-btn:active {
+  transform: translateY(1px);
+}
+
+/* Antd Modal: blur the background (mask) */
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .ant-modal-root .ant-modal-mask {
+    background: rgba(15, 18, 24, 0.38) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+}
+
+.ant-modal .ant-modal-content,
+.ant-modal-confirm .ant-modal-content {
+  border-radius: 16px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+}

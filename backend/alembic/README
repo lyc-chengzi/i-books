@@ -1,0 +1,5 @@
+Alembic migrations live here.
+
+Typical workflow (run in backend folder):
+- alembic revision --autogenerate -m "init"
+- alembic upgrade head
