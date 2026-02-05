@@ -17,7 +17,13 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me"
     jwt_expire_minutes: int = 60
 
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000"
+
+    # If enabled, FastAPI will serve the built frontend (Vite dist) as static files.
+    # This is useful for local Windows deployment: run one process and open http://localhost:8000
+    serve_frontend: bool = False
+    # Path can be absolute or repo-root-relative (when running from backend/).
+    frontend_dist_dir: str = "../frontend/dist"
 
 
 settings = Settings()

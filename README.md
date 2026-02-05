@@ -34,10 +34,37 @@
 ## 启动前端
 
 在 `frontend` 目录：
-- 安装依赖：`npm install`
-- 启动：`npm run dev`
+- 安装依赖：`pnpm install`（或 `npm install`）
+- 启动：`pnpm dev`（或 `npm run dev`）
 
 前端默认代理 `/api` 到 `http://127.0.0.1:8000`。
+
+## 本机部署（不需要每次跑开发命令）
+
+目标：前端打包成静态文件，后端 FastAPI 直接托管 `frontend/dist`，你只需要启动一个后端进程，然后访问 `http://localhost:8000`。
+
+1) 配置后端环境变量
+- 复制 [backend/.env.example](backend/.env.example) 为 `backend/.env`
+- 设置 `IBOOKS_JWT_SECRET`
+- 确认 `IBOOKS_SERVE_FRONTEND=true`
+
+2) 一键构建 + 启动（推荐）
+
+在仓库根目录运行（PowerShell）：
+- `powershell -ExecutionPolicy Bypass -File .\deploy\windows\run-local.ps1`
+
+运行后打开：`http://localhost:8000`
+
+3) 可选：开机/登录自动启动（Task Scheduler）
+
+安装任务：
+- `powershell -ExecutionPolicy Bypass -File .\deploy\windows\install-schtask.ps1`
+
+立刻启动任务：
+- `schtasks /Run /TN iBooks`
+
+卸载任务：
+- `powershell -ExecutionPolicy Bypass -File .\deploy\windows\uninstall-schtask.ps1`
 
 ## 最小可用路径
 
