@@ -1,13 +1,12 @@
-import { BarChartOutlined, CreditCardOutlined, SettingOutlined } from '@ant-design/icons';
-import { Button, Layout, Menu, Space, Typography } from 'antd';
+import { BarChartOutlined, CreditCardOutlined, MenuOutlined, SettingOutlined } from '@ant-design/icons';
+import { Avatar, Button, Drawer, Dropdown, Menu, Space, Typography } from 'antd';
 import type { MouseEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../auth/useAuth';
 
 import './root-layout.css';
-
-const { Header, Sider, Content } = Layout;
 
 type TopKey = 'ledger' | 'stats' | 'config';
 
@@ -22,71 +21,129 @@ export function RootLayout() {
   const navigate = useNavigate();
   const auth = useAuth();
 
+  const [navOpen, setNavOpen] = useState(false);
+
   const selectedTopKey = getTopKey(location.pathname);
+
+  const topMenuItems = useMemo(
+    () => [
+      { key: 'ledger', label: '记账', icon: <CreditCardOutlined /> },
+      { key: 'stats', label: '统计', icon: <BarChartOutlined /> },
+      { key: 'config', label: '配置', icon: <SettingOutlined /> }
+    ],
+    []
+  );
 
   const handleTopClick = ({ key }: { key: string }) => {
     if (key === 'ledger') navigate('/ledger/expense/new');
     if (key === 'stats') navigate('/stats/year-category');
     if (key === 'config') navigate('/config/bank-accounts');
+    setNavOpen(false);
   };
 
+  const username = auth.user?.username ?? '-';
+  const userInitial = (username && username !== '-' ? username.trim()[0] : 'U').toUpperCase();
+
   return (
-    <Layout className="appShell" style={{ height: '100vh', minHeight: '100vh' }}>
-      <Sider
-        width={160}
-        theme="light"
-        className="appSider"
-        style={{ overflow: 'auto' }}
-      >
-        <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="appLogo" />
-          <Typography.Title level={5} style={{ margin: 0 }}>
-            iBooks
-          </Typography.Title>
+    <div className="appShell appFrame">
+      <div className="appTopBar appGlass appGlass--strong">
+        <div className="appTopBarLeft">
+          <Button
+            className="appNavToggle"
+            type="text"
+            aria-label="打开导航"
+            icon={<MenuOutlined />}
+            onClick={() => setNavOpen(true)}
+          />
+
+          <div className="appBrand" onClick={() => navigate('/ledger/expense/new')} role="button" tabIndex={0}>
+            <div className="appLogo" aria-hidden="true" />
+            <div className="appBrandText">
+              <Typography.Text strong>iBooks</Typography.Text>
+              <Typography.Text type="secondary" className="appBrandSub">
+                个人记账
+              </Typography.Text>
+            </div>
+          </div>
         </div>
 
         <Menu
-          mode="inline"
-          className="rootSiderMenu"
+          mode="horizontal"
+          className="rootTopMenu"
           selectedKeys={[selectedTopKey]}
-          inlineIndent={10}
-          items={[
-            { key: 'ledger', label: '记账', icon: <CreditCardOutlined /> },
-            { key: 'stats', label: '统计', icon: <BarChartOutlined /> },
-            { key: 'config', label: '配置', icon: <SettingOutlined /> }
-          ]}
+          items={topMenuItems}
           onClick={handleTopClick}
         />
-      </Sider>
 
-      <Layout style={{ minHeight: 0 }}>
-        <Header
-          className="appHeader"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <Typography.Text type="secondary">个人记账系统</Typography.Text>
+        <div className="appUserBar">
+          <Dropdown
+            trigger={['click']}
+            placement="bottomRight"
+            menu={{
+              items: [
+                { key: 'user', label: <span style={{ fontWeight: 600 }}>{username}</span>, disabled: true },
+                { type: 'divider' },
+                {
+                  key: 'logout',
+                  danger: true,
+                  label: '退出登录',
+                  onClick: () => {
+                    auth.logout();
+                    navigate('/login');
+                  }
+                }
+              ]
+            }}
+          >
+            <button className="appUserButton" type="button">
+              <Avatar size={30} className="appUserAvatar">
+                {userInitial}
+              </Avatar>
+              <span className="appUserName">{username}</span>
+            </button>
+          </Dropdown>
+        </div>
+      </div>
 
+      <Drawer
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        placement="left"
+        width={280}
+        title={
           <Space size={10} align="center">
-            <Typography.Text type="secondary">{auth.user?.username ?? '-'}</Typography.Text>
-            <Button
-              type="link"
-              onClick={(e: MouseEvent<HTMLElement>) => {
-                e.preventDefault();
-                auth.logout();
-                navigate('/login');
-              }}
-              style={{ paddingInline: 0 }}
-            >
-              退出登录
-            </Button>
+            <div className="appLogo" aria-hidden="true" />
+            <span>iBooks</span>
           </Space>
-        </Header>
-        <Content className="appContent" style={{ overflow: 'hidden', minHeight: 0, display: 'flex' }}>
-          <div className="appContentInner appMainPanel appGlass appGlass--strong">
-            <Outlet />
-          </div>
-        </Content>
-      </Layout>
-    </Layout>
+        }
+      >
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedTopKey]}
+          items={topMenuItems}
+          onClick={handleTopClick}
+        />
+
+        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography.Text type="secondary">{username}</Typography.Text>
+          <Button
+            danger
+            onClick={(e: MouseEvent<HTMLElement>) => {
+              e.preventDefault();
+              auth.logout();
+              navigate('/login');
+            }}
+          >
+            退出登录
+          </Button>
+        </div>
+      </Drawer>
+
+      <div className="appContent">
+        <div className="appContentInner appMainPanel appGlass appGlass--strong">
+          <Outlet />
+        </div>
+      </div>
+    </div>
   );
 }

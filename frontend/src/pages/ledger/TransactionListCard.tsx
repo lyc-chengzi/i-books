@@ -293,9 +293,11 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   }, [filtered]);
 
   useEffect(() => {
-    const validKeys = new Set(groupedPaged.map((g) => g.key));
-    setExpandedGroupKeys((prev) => prev.filter((k) => validKeys.has(k)));
-  }, [groupedPaged]);
+    const allKeys = groupedPaged.map((g) => g.key);
+    if (!groupByDate) return;
+    // Default to fully expanded for the current page/groups.
+    setExpandedGroupKeys(allKeys);
+  }, [groupByDate, groupedPaged]);
 
   const tableData = useMemo((): TableRow[] => {
     return groupByDate ? (groupedPaged as TableRow[]) : (paged as TableRow[]);

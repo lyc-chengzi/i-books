@@ -4,47 +4,95 @@
   background: transparent;
 }
 
-.appSider {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.8) 0%,
-    rgba(255, 255, 255, 0.66) 100%
-  ) !important;
-  border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+/* New: inset frame + floating top bar (less "admin shell") */
+.appFrame {
+  height: 100vh;
+  min-height: 100vh;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
 }
 
-.appHeader {
-  background: rgba(255, 255, 255, 0.74) !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+.appTopBar {
+  flex: none;
+  height: 56px;
+  border-radius: var(--app-radius-lg);
+  padding: 0 14px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(245, 247, 250, 0.74) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.06);
+}
+
+/* Metallic highlight edge */
+.appTopBar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+}
+
+.appTopBar {
+  position: relative;
+}
+
+.appTopBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.appNavToggle {
+  display: none;
+}
+
+.appBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+  cursor: pointer;
+}
+
+.appBrand:focus {
+  outline: none;
+}
+
+.appBrandText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.appBrandSub {
+  font-size: 12px;
+}
+
+.appBrand:hover .appBrandSub {
+  color: rgba(0, 0, 0, 0.65);
 }
 
 .appLogo {
   width: 30px;
   height: 30px;
-  border-radius: 10px;
-  background:
-    radial-gradient(
-      12px 12px at 30% 30%,
-      rgba(255, 255, 255, 0.85),
-      rgba(255, 255, 255, 0) 60%
-    ),
-    linear-gradient(
-      135deg,
-      rgba(217, 58, 47, 1) 0%,
-      rgba(255, 99, 72, 1) 45%,
-      rgba(217, 58, 47, 1) 100%
-    );
-  box-shadow: 0 10px 22px rgba(217, 58, 47, 0.24);
+  background: url('/webicon.svg') center/contain no-repeat;
 }
 
 .appContent {
-  padding: 18px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
 }
 
 .appContentInner {
@@ -60,94 +108,130 @@
 }
 
 @media (max-width: 900px) {
-  .appContent {
-    padding: 14px;
-  }
-
   .appMainPanel {
     border-radius: var(--app-radius-md);
   }
 }
 
-/* Sider menu as large cards */
-.rootSiderMenu {
-  padding: 10px;
+/* Top horizontal navigation: compact metallic pills */
+.rootTopMenu {
+  border-bottom: none !important;
   background: transparent !important;
-  border-inline-end: none !important;
-}
-
-.rootSiderMenu .ant-menu-item {
-  height: 92px;
-  line-height: normal;
-  border-radius: 16px;
-  margin: 10px 6px;
-  padding: 10px 10px;
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 8px;
-  transition:
-    transform 160ms ease,
-    box-shadow 220ms ease,
-    background-color 220ms ease,
-    border-color 220ms ease;
+  min-width: 0;
 }
 
-.rootSiderMenu .ant-menu-item:hover {
+.rootTopMenu.ant-menu-horizontal {
+  line-height: 56px;
+}
+
+.rootTopMenu .ant-menu-item {
+  border-radius: 999px !important;
+  overflow: hidden;
+  margin-inline: 4px;
+  padding-inline: 14px;
+  height: 36px;
+  line-height: 36px;
+  top: 0;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+  transition: transform 120ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.rootTopMenu .ant-menu-item:hover {
   transform: translateY(-1px);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.12);
-  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.72);
 }
 
-/* Remove the default selected indicator bar (it conflicts with card style) */
-.rootSiderMenu .ant-menu-item::after {
+.rootTopMenu .ant-menu-item-selected {
+  border-radius: 999px !important;
+  background:
+    linear-gradient(180deg, rgba(43, 95, 166, 0.12) 0%, rgba(43, 95, 166, 0.06) 100%),
+    rgba(255, 255, 255, 0.78);
+  border-color: rgba(43, 95, 166, 0.18);
+  box-shadow: 0 12px 22px rgba(43, 95, 166, 0.12), 0 10px 18px rgba(0, 0, 0, 0.08);
+}
+
+.rootTopMenu .ant-menu-item::after {
   display: none;
 }
 
-.rootSiderMenu .ant-menu-item.ant-menu-item-selected {
-  color: rgba(0, 0, 0, 0.92);
-  background:
-    radial-gradient(
-      260px 140px at 10% 20%,
-      rgba(217, 58, 47, 0.18),
-      rgba(217, 58, 47, 0) 60%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.78) 0%,
-      rgba(255, 255, 255, 0.62) 100%
-    );
-  border-color: rgba(217, 58, 47, 0.28);
-  box-shadow: 0 16px 36px rgba(217, 58, 47, 0.12), 0 14px 30px rgba(0, 0, 0, 0.1);
+/* AntD Menu uses ::before as the active/hover background in some themes; ensure it stays pill-rounded */
+.rootTopMenu.ant-menu-horizontal > .ant-menu-item::before {
+  border-radius: 999px !important;
+  inset: 0 !important;
 }
 
-.rootSiderMenu .ant-menu-item-icon {
-  margin-inline-end: 0 !important;
-  font-size: 28px !important;
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
+.rootTopMenu.ant-menu-horizontal > .ant-menu-item-selected::before {
+  border-radius: 999px !important;
+  inset: 0 !important;
+}
+
+/* Some AntD builds render the background on the inner "span"; ensure it doesn't look squared */
+.rootTopMenu .ant-menu-item > span {
+  border-radius: 999px;
+}
+
+.appUserBar {
+  justify-self: end;
+}
+
+.appUserButton {
+  appearance: none;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+  height: 36px;
+  padding: 0 10px 0 4px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
-.rootSiderMenu .ant-menu-item.ant-menu-item-selected .ant-menu-item-icon {
-  background: rgba(217, 58, 47, 0.1);
-  border-color: rgba(217, 58, 47, 0.22);
+.appUserButton:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
 }
 
-.rootSiderMenu .ant-menu-title-content {
+.appUserButton:active {
+  transform: translateY(0);
+}
+
+.appUserName {
   font-size: 13px;
-  font-weight: 650;
-  line-height: 1.1;
-  text-align: center;
-  padding: 0;
-  margin: 0 !important;
+  color: rgba(0, 0, 0, 0.72);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appUserAvatar {
+  background: linear-gradient(135deg, rgba(43, 95, 166, 0.95), rgba(43, 95, 166, 0.55));
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(43, 95, 166, 0.18);
+}
+
+@media (max-width: 860px) {
+  .rootTopMenu {
+    display: none;
+  }
+
+  .appNavToggle {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+  }
 }

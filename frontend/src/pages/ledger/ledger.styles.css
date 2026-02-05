@@ -9,23 +9,27 @@
 }
 
 .tx-transactions-table .ant-table-tbody > tr.tx-row-flash > td {
-  background: #e6f4ff !important;
+  background: rgba(43, 95, 166, 0.10) !important;
 }
 
 .tx-transactions-table .ant-table-tbody > tr.tx-row-selected > td {
-  background: #bae0ff !important;
+  background: rgba(43, 95, 166, 0.14) !important;
+}
+
+.tx-transactions-table .ant-table-tbody > tr.tx-row-group {
+  background: linear-gradient(135deg, rgba(43, 95, 166, 0.14), rgba(43, 95, 166, 0.06)) !important;
+}
+
+.tx-transactions-table .ant-table-tbody > tr.tx-row-group:hover {
+  background: linear-gradient(135deg, rgba(43, 95, 166, 0.20), rgba(43, 95, 166, 0.10)) !important;
 }
 
 .tx-transactions-table .ant-table-tbody > tr.tx-row-group > td {
-  background: rgba(217, 58, 47, 0.07) !important;
+  background: transparent !important;
   font-weight: 650;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   cursor: pointer;
-}
-
-.tx-transactions-table .ant-table-tbody > tr.tx-row-group:hover > td {
-  background: rgba(217, 58, 47, 0.12) !important;
 }
 
 .ledger-floating-actions {
