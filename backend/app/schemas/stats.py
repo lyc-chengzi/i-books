@@ -21,6 +21,13 @@ class YearCategoryStatsOut(BaseModel):
     monthlyTotals: list[MonthAmount]
 
 
+class MonthCategoryStatsOut(BaseModel):
+    month: str = Field(description="YYYY-MM")
+    type: str = Field(pattern="^(income|expense)$")
+    totalCents: int
+    breakdown: list[CategoryAmount]
+
+
 class MonthlyInOut(BaseModel):
     month: str = Field(description="YYYY-MM")
     incomeCents: int

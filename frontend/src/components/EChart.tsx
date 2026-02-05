@@ -6,11 +6,13 @@ import { useEffect, useMemo, useRef } from 'react';
 export function EChart({
   option,
   style,
-  className
+  className,
+  onClick
 }: {
   option: EChartsOption;
   style?: CSSProperties;
   className?: string;
+  onClick?: (params: unknown) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -41,6 +43,17 @@ export function EChart({
   useEffect(() => {
     chartRef.current?.setOption(option, { notMerge: true, lazyUpdate: true });
   }, [option]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !onClick) return;
+
+    const handler = (params: unknown) => onClick(params);
+    chart.on('click', handler);
+    return () => {
+      chart.off('click', handler);
+    };
+  }, [onClick]);
 
   return <div ref={containerRef} className={className} style={mergedStyle} />;
 }

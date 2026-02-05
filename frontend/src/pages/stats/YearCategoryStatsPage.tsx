@@ -19,11 +19,19 @@ type StatsOut = {
   monthlyTotals: Array<{ month: string; amountCents: number }>;
 };
 
+type MonthStatsOut = {
+  month: string;
+  type: 'income' | 'expense';
+  totalCents: number;
+  breakdown: Array<{ categoryId: number; amountCents: number }>;
+};
+
 export function YearCategoryStatsPage() {
   const auth = useAuth();
 
   const [year, setYear] = useState<number>(dayjs().year());
   const [type, setType] = useState<'expense' | 'income'>('expense');
+  const [drillMonth, setDrillMonth] = useState<string | null>(null);
 
   const categoriesQuery = useQuery({
     queryKey: ['categoriesTree', type],
@@ -33,6 +41,12 @@ export function YearCategoryStatsPage() {
   const statsQuery = useQuery({
     queryKey: ['stats', 'year-category', year, type],
     queryFn: () => api.get<StatsOut>(`/stats/year-category?year=${year}&type=${type}`, { token: auth.token })
+  });
+
+  const monthStatsQuery = useQuery({
+    queryKey: ['stats', 'month-category', drillMonth, type],
+    queryFn: () => api.get<MonthStatsOut>(`/stats/month-category?month=${encodeURIComponent(drillMonth ?? '')}&type=${type}`, { token: auth.token }),
+    enabled: !!drillMonth
   });
 
   const pathMap = useMemo(() => buildCategoryPathMap(categoriesQuery.data ?? []), [categoriesQuery.data]);
@@ -120,21 +134,82 @@ export function YearCategoryStatsPage() {
     [months]
   );
 
+  const monthBreakdownSorted = useMemo(() => {
+    const items = (monthStatsQuery.data?.breakdown ?? [])
+      .map((x) => ({
+        categoryId: x.categoryId,
+        amountCents: x.amountCents,
+        path: pathMap.get(x.categoryId) ?? `#${x.categoryId}`
+      }))
+      .filter((x) => x.amountCents > 0);
+    items.sort((a, b) => b.amountCents - a.amountCents);
+    return items;
+  }, [monthStatsQuery.data?.breakdown, pathMap]);
+
+  const monthPieData = useMemo(() => {
+    const topN = 12;
+    const top = monthBreakdownSorted.slice(0, topN);
+    const rest = monthBreakdownSorted.slice(topN);
+    const restSum = rest.reduce((acc, x) => acc + x.amountCents, 0);
+    const out = top.map((x) => ({ name: getLeafName(x.path), value: x.amountCents, full: x.path }));
+    if (restSum > 0) out.push({ name: '其他', value: restSum, full: '其他' });
+    return out;
+  }, [monthBreakdownSorted]);
+
+  const monthPieOption = useMemo(
+    () => ({
+      tooltip: {
+        trigger: 'item',
+        formatter: (p: any) => `${p.data.full}<br/>¥${formatYuan(p.value)}（${p.percent}%）`
+      },
+      legend: {
+        type: 'scroll',
+        bottom: 0
+      },
+      series: [
+        {
+          type: 'pie',
+          radius: ['35%', '70%'],
+          avoidLabelOverlap: true,
+          itemStyle: { borderRadius: 8, borderColor: 'rgba(255,255,255,0.9)', borderWidth: 2 },
+          label: { show: false },
+          emphasis: { label: { show: true, fontWeight: 700 } },
+          data: monthPieData
+        }
+      ]
+    }),
+    [monthPieData]
+  );
+
+  const handleLineClick = (params: unknown) => {
+    const anyP = params as any;
+    const monthName: string | undefined = typeof anyP?.name === 'string' ? anyP.name : undefined;
+    if (!monthName) return;
+    if (!/^\d{4}-\d{2}$/.test(monthName)) return;
+    setDrillMonth(monthName);
+  };
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card
-        title="年度分类统计"
+        title="年度统计"
         extra={
           <Space size={12} align="center">
             <DatePicker
               picker="year"
               value={dayjs(`${year}-01-01`)}
-              onChange={(v: Dayjs | null) => setYear(v ? v.year() : dayjs().year())}
+              onChange={(v: Dayjs | null) => {
+                setYear(v ? v.year() : dayjs().year());
+                setDrillMonth(null);
+              }}
               allowClear={false}
             />
             <Radio.Group
               value={type}
-              onChange={(e) => setType(e.target.value)}
+              onChange={(e) => {
+                setType(e.target.value);
+                setDrillMonth(null);
+              }}
               optionType="button"
               buttonStyle="solid"
               options={[
@@ -165,8 +240,28 @@ export function YearCategoryStatsPage() {
           <EChart option={pieOption as any} style={{ height: 420 }} />
         </Card>
 
-        <Card title="月度趋势" loading={statsQuery.isLoading}>
-          <EChart option={lineOption as any} style={{ height: 420 }} />
+        <Card
+          title={drillMonth ? `${drillMonth} 费用项目` : '月度趋势'}
+          loading={drillMonth ? monthStatsQuery.isLoading : statsQuery.isLoading}
+          extra={
+            drillMonth ? (
+              <Button onClick={() => setDrillMonth(null)} type="link">
+                返回
+              </Button>
+            ) : null
+          }
+        >
+          {drillMonth ? (
+            <>
+              <Space size={12} wrap style={{ marginBottom: 8 }}>
+                <Typography.Text type="secondary">月合计</Typography.Text>
+                <Typography.Text strong>¥{formatYuan(monthStatsQuery.data?.totalCents ?? 0)}</Typography.Text>
+              </Space>
+              <EChart option={monthPieOption as any} style={{ height: 420 }} />
+            </>
+          ) : (
+            <EChart option={lineOption as any} style={{ height: 420 }} onClick={handleLineClick} />
+          )}
         </Card>
       </div>
     </div>

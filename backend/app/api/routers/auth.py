@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserMe
@@ -26,7 +27,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> UserMe:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.scalar(select(User).where(User.username == payload.username))
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -34,7 +35,26 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return TokenResponse(access_token=create_access_token(str(user.id)))
+    token = create_access_token(str(user.id))
+
+    # Store JWT in HttpOnly cookie so refresh doesn't lose login state.
+    response.set_cookie(
+        key=settings.auth_cookie_name,
+        value=token,
+        httponly=True,
+        secure=bool(settings.auth_cookie_secure),
+        samesite=settings.auth_cookie_samesite,
+        max_age=int(settings.jwt_expire_minutes) * 60,
+        path="/",
+    )
+
+    return TokenResponse(access_token=token)
+
+
+@router.post("/logout")
+def logout(response: Response) -> dict:
+    response.delete_cookie(key=settings.auth_cookie_name, path="/")
+    return {"ok": True}
 
 
 @router.get("/me", response_model=UserMe)

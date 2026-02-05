@@ -6,6 +6,7 @@ type ExtraOptions = {
 
 const client = ofetch.create({
   baseURL: '/api',
+  credentials: 'include',
   headers: {
     'Content-Type': 'application/json'
   }

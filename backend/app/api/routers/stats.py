@@ -12,6 +12,7 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.stats import (
     MonthCategoryCompare,
+    MonthCategoryStatsOut,
     MonthlyInOut,
     MonthlyRangeOut,
     YearCategoryStatsOut,
@@ -274,4 +275,44 @@ def monthly_range(
         startMonth=startMonth,
         endMonth=endMonth,
         series=list(series_map.values()),
+    )
+
+
+@router.get("/month-category", response_model=MonthCategoryStatsOut)
+def month_category_stats(
+    month: str,
+    type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MonthCategoryStatsOut:
+    if type not in ("income", "expense"):
+        raise HTTPException(status_code=400, detail="Invalid type")
+
+    y, m = _parse_yyyy_mm(month)
+    start, end = _month_bounds_utc_naive(y, m)
+
+    rows = db.execute(
+        select(Transaction.category_id, func.coalesce(func.sum(Transaction.amount_cents), 0))
+        .where(
+            Transaction.user_id == current_user.id,
+            Transaction.type == type,
+            Transaction.category_id.is_not(None),
+            Transaction.occurred_at >= to_utc_naive(start),
+            Transaction.occurred_at < to_utc_naive(end),
+        )
+        .group_by(Transaction.category_id)
+    ).all()
+
+    breakdown = [
+        {"categoryId": int(category_id), "amountCents": int(amount)}
+        for category_id, amount in rows
+        if category_id is not None
+    ]
+    total_cents = sum(int(x["amountCents"]) for x in breakdown)
+
+    return MonthCategoryStatsOut(
+        month=month,
+        type=type,
+        totalCents=total_cents,
+        breakdown=breakdown,
     )

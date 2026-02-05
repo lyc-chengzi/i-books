@@ -374,15 +374,21 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             value={dateRange}
             // date-only picker for filter (day precision)
             format="YYYY-MM-DD"
-            ranges={{
-              '今年': [dayjs().startOf('year'), dayjs().endOf('year')],
-              '去年': [dayjs().subtract(1, 'year').startOf('year'), dayjs().subtract(1, 'year').endOf('year')],
-              '本月': [dayjs().startOf('month'), dayjs().endOf('month')],
-              '上月': [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')],
-              '近三个月': [dayjs().subtract(2, 'month').startOf('month'), dayjs().endOf('month')],
-              '本周': [thisWeekStart, thisWeekEnd],
-              '上周': [thisWeekStart.subtract(7, 'day'), thisWeekStart.subtract(1, 'day')]
-            }}
+            presets={[
+              { label: '今年', value: [dayjs().startOf('year'), dayjs().endOf('year')] },
+              {
+                label: '去年',
+                value: [dayjs().subtract(1, 'year').startOf('year'), dayjs().subtract(1, 'year').endOf('year')]
+              },
+              { label: '本月', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
+              {
+                label: '上月',
+                value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')]
+              },
+              { label: '近三个月', value: [dayjs().subtract(2, 'month').startOf('month'), dayjs().endOf('month')] },
+              { label: '本周', value: [thisWeekStart, thisWeekEnd] },
+              { label: '上周', value: [thisWeekStart.subtract(7, 'day'), thisWeekStart.subtract(1, 'day')] }
+            ]}
             onChange={(v) => setDateRange(v ?? [null, null])}
             style={{ width: 260 }}
           />

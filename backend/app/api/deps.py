@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.session import SessionLocal
 from app.models.user import User
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_db() -> Session:
@@ -20,11 +21,21 @@ def get_db() -> Session:
 
 
 def get_current_user(
-    cred: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    request: Request,
+    cred: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    token: str | None = None
+    if cred and cred.credentials:
+        token = cred.credentials
+    else:
+        token = request.cookies.get(settings.auth_cookie_name)
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
-        user_id = int(decode_access_token(cred.credentials))
+        user_id = int(decode_access_token(token))
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
