@@ -109,7 +109,7 @@ export function RootLayout() {
         open={navOpen}
         onClose={() => setNavOpen(false)}
         placement="left"
-        width={280}
+        size={280}
         title={
           <Space size={10} align="center">
             <div className="appLogo" aria-hidden="true" />

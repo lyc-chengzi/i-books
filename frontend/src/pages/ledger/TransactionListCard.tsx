@@ -8,7 +8,6 @@ import { CategoryLeafSelect, type CategoryNode, type CategoryType } from '../../
 import { useAuth } from '../../auth/useAuth';
 import { api, getApiErrorMessage } from '../../lib/api';
 
-alert(version);
 type BankAccount = {
   id: number;
   bankName: string;
