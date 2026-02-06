@@ -63,6 +63,8 @@ def create_transfer(
         fundingSource=row.funding_source,
         bankAccountId=row.bank_account_id,
         toBankAccountId=row.to_bank_account_id,
+        refundOfTransactionId=getattr(row, "refund_of_transaction_id", None),
+        refundedCents=None,
         note=row.note,
         tagIds=[],
         tagNames=[],

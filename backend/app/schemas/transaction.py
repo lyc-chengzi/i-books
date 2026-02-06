@@ -30,6 +30,8 @@ class TransactionOut(BaseModel):
     fundingSource: str
     bankAccountId: int | None
     toBankAccountId: int | None = None
+    refundOfTransactionId: int | None = None
+    refundedCents: int | None = None
     note: str | None
 
     tagIds: list[int] = Field(default_factory=list)
@@ -40,3 +42,11 @@ class TransactionUpdate(BaseModel):
     occurredAt: datetime | None = None
     categoryId: int | None = None
     tagIds: list[int] | None = None
+
+
+class TransactionListOut(BaseModel):
+    items: list[TransactionOut]
+    refundItems: list[TransactionOut] = Field(default_factory=list)
+    total: int
+    incomeCents: int
+    expenseCents: int

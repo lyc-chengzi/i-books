@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, EditOutlined, ReloadOutlined } from '@ant-design/icons';
-import { App as AntdApp, Button, Card, DatePicker, Form, Input, Modal, Pagination, Select, Space, Switch, Table, Typography } from 'antd';
+import { DeleteOutlined, EditOutlined, ReloadOutlined, RollbackOutlined } from '@ant-design/icons';
+import { App as AntdApp, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Pagination, Radio, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type Key } from 'react';
 
 import { CategoryLeafSelect, type CategoryNode, type CategoryType } from '../../components/CategoryLeafSelect';
 import { useAuth } from '../../auth/useAuth';
@@ -20,7 +20,7 @@ type BankAccount = {
 
 type TransactionRow = {
   id: number;
-  type: 'income' | 'expense' | 'transfer';
+  type: 'income' | 'expense' | 'transfer' | 'refund';
   amountCents: number;
   occurredAt: string;
   createdAt: string;
@@ -28,9 +28,20 @@ type TransactionRow = {
   fundingSource: 'cash' | 'bank';
   bankAccountId: number | null;
   toBankAccountId?: number | null;
+  refundOfTransactionId?: number | null;
+  refundedCents?: number | null;
   note: string | null;
   tagIds: number[];
   tagNames: string[];
+  children?: TransactionRow[];
+};
+
+type TransactionListOut = {
+  items: TransactionRow[];
+  refundItems: TransactionRow[];
+  total: number;
+  incomeCents: number;
+  expenseCents: number;
 };
 
 type CategoryTagDto = {
@@ -83,16 +94,45 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [flashRowId, setFlashRowId] = useState<number | null>(null);
 
-  const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
+  const [expandedRowKeys, setExpandedRowKeys] = useState<Key[]>([]);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionRow | null>(null);
   const [editTopLevelExpenseCategoryId, setEditTopLevelExpenseCategoryId] = useState<number | null>(null);
   const [editForm] = Form.useForm<{ occurredAt: Dayjs; categoryId: number; tagIds?: number[] }>();
 
-  const listQuery = useQuery({
-    queryKey: ['transactions'],
-    queryFn: () => api.get<TransactionRow[]>('/ledger/transactions', { token: auth.token })
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refunding, setRefunding] = useState<TransactionRow | null>(null);
+  const [refundForm] = Form.useForm<{ mode: 'full' | 'partial'; amount?: number }>();
+
+  const listQuery = useQuery<TransactionListOut>({
+    queryKey: [
+      'transactions',
+      {
+        typeFilter,
+        sourceFilter,
+        bankAccountFilter,
+        start: dateRange?.[0]?.toISOString() ?? null,
+        end: dateRange?.[1]?.toISOString() ?? null,
+        keyword,
+        page,
+        pageSize
+      }
+    ],
+    queryFn: () => {
+      const [start, end] = dateRange;
+      const params = new URLSearchParams();
+      params.set('type', typeFilter);
+      params.set('fundingSource', sourceFilter);
+      if (bankAccountFilter !== 'all') params.set('bankAccountId', String(bankAccountFilter));
+      if (start) params.set('start', start.startOf('day').toISOString());
+      if (end) params.set('end', end.endOf('day').toISOString());
+      if (keyword.trim()) params.set('keyword', keyword.trim());
+      params.set('page', String(page));
+      params.set('pageSize', String(pageSize));
+      return api.get<TransactionListOut>(`/ledger/transactions?${params.toString()}`, { token: auth.token });
+    },
+    placeholderData: (prev) => prev
   });
 
   const flashQuery = useQuery({
@@ -185,52 +225,46 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
     }
   });
 
-  const filtered = useMemo(() => {
-    const rows = listQuery.data ?? [];
-    const kw = keyword.trim().toLowerCase();
-    const [start, end] = dateRange;
-
-    const next = rows.filter((row) => {
-      if (typeFilter !== 'all' && row.type !== typeFilter) return false;
-
-      if (sourceFilter !== 'all') {
-        if (row.type === 'transfer') return false;
-        if (row.fundingSource !== sourceFilter) return false;
-      }
-
-      if (start || end) {
-        const t = dayjs(row.occurredAt);
-        if (start) {
-          const s = start.startOf('day');
-          if (t.isBefore(s)) return false;
-        }
-        if (end) {
-          const e = end.endOf('day');
-          if (t.isAfter(e)) return false;
-        }
-      }
-
-      if (kw) {
-        const note = (row.note ?? '').toLowerCase();
-        const tags = (row.tagNames ?? []).join(' ').toLowerCase();
-        if (!note.includes(kw) && !tags.includes(kw)) return false;
-      }
-
-      if (bankAccountFilter !== 'all') {
-        const id = Number(bankAccountFilter);
-        const involved = row.bankAccountId === id || row.toBankAccountId === id;
-        if (!involved) return false;
-      }
-
-      return true;
-    });
-    return next;
-  }, [bankAccountFilter, dateRange, keyword, listQuery.data, sourceFilter, typeFilter]);
+  const refundMutation = useMutation({
+    mutationFn: async (payload: { id: number; mode: 'full' | 'partial'; amountCents?: number }) => {
+      return api.post<TransactionRow>(`/ledger/transactions/${payload.id}/refund`, {
+        mode: payload.mode,
+        amountCents: payload.mode === 'partial' ? payload.amountCents : null
+      }, { token: auth.token });
+    },
+    onSuccess: async (created) => {
+      message.success('已退款');
+      setRefundOpen(false);
+      setRefunding(null);
+      refundForm.resetFields();
+      queryClient.setQueryData(['ui', 'transactions', 'flashRow'], { id: created.id, at: Date.now() });
+      await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      await queryClient.invalidateQueries({ queryKey: ['bankAccounts'] });
+    },
+    onError: (err) => {
+      message.error(getApiErrorMessage(err));
+    }
+  });
 
   const paged = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return (filtered ?? []).slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
+    const items = listQuery.data?.items ?? [];
+    const refunds = listQuery.data?.refundItems ?? [];
+
+    const map = new Map<number, TransactionRow[]>();
+    for (const r of refunds) {
+      const parentId = r.refundOfTransactionId ?? null;
+      if (!parentId) continue;
+      const list = map.get(parentId);
+      if (list) list.push(r);
+      else map.set(parentId, [r]);
+    }
+
+    return items.map((it) => {
+      const children = map.get(it.id) ?? [];
+      if (!children.length) return it;
+      return { ...it, children };
+    });
+  }, [listQuery.data?.items, listQuery.data?.refundItems]);
 
   const groupedPaged = useMemo((): GroupRow[] => {
     const groups = new Map<string, TransactionRow[]>();
@@ -278,25 +312,25 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   }, [flashQuery.data?.id, queryClient]);
 
   useEffect(() => {
-    const flashId = flashQuery.data?.id ?? null;
-    if (!flashId) return;
-    const idx = (filtered ?? []).findIndex((r) => r.id === flashId);
-    if (idx < 0) return;
-    const nextPage = Math.floor(idx / pageSize) + 1;
-    setPage(nextPage);
-  }, [filtered, flashQuery.data?.id, pageSize]);
+    // With server-side paging, we don't auto-jump to the page containing the flash row.
+    // Keep the highlight if the row is in the current page.
+  }, []);
 
   const totals = useMemo(() => {
-    const income = (filtered ?? []).reduce((acc, r) => (r.type === 'income' ? acc + (r.amountCents ?? 0) : acc), 0);
-    const expense = (filtered ?? []).reduce((acc, r) => (r.type === 'expense' ? acc + (r.amountCents ?? 0) : acc), 0);
-    return { income, expense };
-  }, [filtered]);
+    return {
+      income: listQuery.data?.incomeCents ?? 0,
+      expense: listQuery.data?.expenseCents ?? 0
+    };
+  }, [listQuery.data?.expenseCents, listQuery.data?.incomeCents]);
 
   useEffect(() => {
     const allKeys = groupedPaged.map((g) => g.key);
     if (!groupByDate) return;
-    // Default to fully expanded for the current page/groups.
-    setExpandedGroupKeys(allKeys);
+    // Default to fully expanded date groups for the current page, but preserve other expanded keys.
+    setExpandedRowKeys((prev) => {
+      const txKeys = (prev ?? []).filter((k) => typeof k === 'number');
+      return [...txKeys, ...allKeys];
+    });
   }, [groupByDate, groupedPaged]);
 
   const tableData = useMemo((): TableRow[] => {
@@ -346,7 +380,8 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
               { value: 'all', label: '全部类型' },
               { value: 'expense', label: '支出' },
               { value: 'income', label: '收入' },
-              { value: 'transfer', label: '转账' }
+              { value: 'transfer', label: '转账' },
+              { value: 'refund', label: '退款' }
             ]}
             onChange={(v) => setTypeFilter(v)}
           />
@@ -426,31 +461,26 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
           />
         </Space>
 
-        <div ref={tableScrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <div ref={tableScrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
           <Table
             rowKey={(record: TableRow) => (isGroupRow(record) ? record.key : record.id)}
             loading={listQuery.isLoading}
             dataSource={tableData}
             className="tx-transactions-table"
             sticky={{ getContainer: () => tableScrollRef.current ?? document.body }}
-            expandable={
-              groupByDate
-                ? {
-                    expandedRowKeys: expandedGroupKeys,
-                    onExpandedRowsChange: (keys) => setExpandedGroupKeys(keys as string[]),
-                    expandRowByClick: true,
-                    showExpandColumn: false,
-                    rowExpandable: (record) => isGroupRow(record)
-                  }
-                : undefined
-            }
+            scroll={{ x: 1810 }}
+            expandable={{
+              expandedRowKeys,
+              onExpandedRowsChange: (keys) => setExpandedRowKeys(keys as Key[]),
+              expandRowByClick: true,
+              showExpandColumn: true
+            }}
             rowClassName={(record: TableRow, index: number) => {
               const classes: string[] = [];
               if (isGroupRow(record)) {
                 classes.push('tx-row-group');
                 return classes.join(' ');
               }
-              if (index % 2 === 1) classes.push('tx-row-zebra');
               if (record.id === flashRowId) classes.push('tx-row-flash');
               if (record.id === selectedRowId) classes.push('tx-row-selected');
               return classes.join(' ');
@@ -465,6 +495,8 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '发生时间',
               dataIndex: 'occurredAt',
+              width: 220,
+              fixed: 'left',
               render: (_v: unknown, record: TableRow) => {
                 if (isGroupRow(record)) {
                   return (
@@ -478,14 +510,24 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                 const d = dayjs(v);
                 const short = d.format('YYYY-MM-DD');
                 const full = d.format('YYYY-MM-DD HH:mm');
-                return <span title={full}>{short}</span>;
+
+                const hasRefundChild = record.type === 'expense' && (record.children ?? []).some((c) => c.type === 'refund');
+                return (
+                  <Space size={8} align="center">
+                    <span title={full}>{short}</span>
+                    {hasRefundChild ? <Tag>退款</Tag> : null}
+                  </Space>
+                );
               }
             },
             {
               title: '项目',
+              width: 300,
+              fixed: 'left',
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
                 if (row.type === 'transfer') return '转账/还款';
+                if (row.type === 'refund') return '退款';
                 if (!row.categoryId) return '-';
                 const path = categoryPathMap.get(row.categoryId) ?? `#${row.categoryId}`;
                 const parts = path.split('/');
@@ -504,6 +546,8 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '金额',
               dataIndex: 'amountCents',
+              width: 230,
+              fixed: 'left',
               render: (_v: unknown, row: TableRow) => {
                 if (isGroupRow(row)) {
                   return (
@@ -526,14 +570,17 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '来源',
               dataIndex: 'fundingSource',
+              width: 150,
               render: (v, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
                 if (row.type === 'transfer') return '转账';
+                if (row.type === 'refund') return '退款';
                 return v === 'cash' ? '现金' : '银行卡/信用卡';
               }
             },
             {
               title: '账户',
+              width: 220,
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
                 if (row.type === 'transfer') {
@@ -555,6 +602,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '标签',
               dataIndex: 'tagNames',
+              width: 120,
               render: (_v: unknown, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
                 const v = row.tagNames;
@@ -564,15 +612,28 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '备注',
               dataIndex: 'note',
+              width: 200,
               render: (_v: unknown, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
-                return row.note ?? '-';
+                const note = row.note?.trim() ?? '';
+                if (!note) return '-';
+                return (
+                  <Tooltip title={note} placement="topLeft">
+                    <Typography.Text
+                      ellipsis={{ tooltip: false }}
+                      style={{ display: 'inline-block', maxWidth: '100%' }}
+                    >
+                      {note}
+                    </Typography.Text>
+                  </Tooltip>
+                );
               }
             }
             ,
             {
               title: '创建时间',
               dataIndex: 'createdAt',
+              width: 150,
               render: (_v: unknown, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
                 const v = row.createdAt;
@@ -581,10 +642,23 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             },
             {
               title: '操作',
-              width: 96,
+              width: 150,
+              fixed: 'right',
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return null;
-                const editable = row.type !== 'transfer';
+                const isRefund = !!row.refundOfTransactionId;
+                const editable = row.type !== 'transfer' && !isRefund;
+
+                const canRefundBase = row.type === 'expense' && row.fundingSource === 'bank' && !isRefund && (row.amountCents ?? 0) > 0;
+                const refunded = row.refundedCents ?? 0;
+                const remaining = (row.amountCents ?? 0) - refunded;
+                const canRefund = canRefundBase && remaining > 0;
+
+                const refundTip = canRefundBase
+                  ? remaining <= 0
+                    ? '已全额退款'
+                    : `可退款 ¥${(remaining / 100).toFixed(2)}`
+                  : '仅支持银行卡支出退款';
                 return (
                   <Space size={0}>
                     <Button
@@ -595,7 +669,8 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!editable) {
-                          message.info('暂不支持编辑转账');
+                          if (row.type === 'transfer') message.info('暂不支持编辑转账');
+                          else message.info('退款流水不支持编辑');
                           return;
                         }
                         setEditing(row);
@@ -608,6 +683,27 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                         } as any);
                       }}
                     />
+                    <Tooltip title={refundTip}>
+                      <span>
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<RollbackOutlined />}
+                          disabled={!canRefund}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!canRefund) {
+                              if (canRefundBase && remaining <= 0) message.info('该记录已全额退款');
+                              else message.info('仅支持对“银行卡支出”进行退款');
+                              return;
+                            }
+                            setRefunding(row);
+                            setRefundOpen(true);
+                            refundForm.setFieldsValue({ mode: 'full', amount: undefined });
+                          }}
+                        />
+                      </span>
+                    </Tooltip>
                     <Button
                       type="link"
                       size="small"
@@ -651,7 +747,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
           <Pagination
             current={page}
             pageSize={pageSize}
-            total={(filtered ?? []).length}
+            total={listQuery.data?.total ?? 0}
             showSizeChanger
             pageSizeOptions={['20', '50', '100', '200']}
             onChange={(nextPage, nextPageSize) => {
@@ -728,6 +824,98 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                 />
               </Form.Item>
             ) : null}
+          </Form>
+        </Modal>
+
+        <Modal
+          open={refundOpen}
+          title="退款"
+          okText="确认退款"
+          cancelText="取消"
+          confirmLoading={refundMutation.isPending}
+          onCancel={() => {
+            setRefundOpen(false);
+            setRefunding(null);
+            refundForm.resetFields();
+          }}
+          onOk={async () => {
+            if (!refunding) return;
+
+            const refunded = refunding.refundedCents ?? 0;
+            const remaining = (refunding.amountCents ?? 0) - refunded;
+            if (remaining <= 0) {
+              message.info('该记录已全额退款');
+              return;
+            }
+
+            const v = await refundForm.validateFields();
+            if (v.mode === 'full') {
+              await refundMutation.mutateAsync({ id: refunding.id, mode: 'full' });
+              return;
+            }
+
+            const amt = Number(v.amount ?? 0);
+            const cents = Math.round(amt * 100);
+            await refundMutation.mutateAsync({ id: refunding.id, mode: 'partial', amountCents: cents });
+          }}
+        >
+          <Form
+            form={refundForm}
+            layout="vertical"
+            initialValues={{ mode: 'full' }}
+          >
+            <Typography.Paragraph style={{ marginBottom: 12 }}>
+              可退款金额：
+              <Typography.Text strong>
+                ¥{(
+                  refunding
+                    ? Math.max(0, (refunding.amountCents ?? 0) - (refunding.refundedCents ?? 0)) / 100
+                    : 0
+                ).toFixed(2)}
+              </Typography.Text>
+            </Typography.Paragraph>
+
+            <Form.Item label="退款方式" name="mode" rules={[{ required: true }]}>
+              <Radio.Group
+                options={[
+                  { label: '全额退款', value: 'full' },
+                  { label: '部分退款', value: 'partial' }
+                ]}
+                optionType="button"
+                buttonStyle="solid"
+              />
+            </Form.Item>
+
+            <Form.Item noStyle dependencies={['mode']}>
+              {({ getFieldValue }) => {
+                const mode = getFieldValue('mode') as 'full' | 'partial' | undefined;
+                if (mode !== 'partial') return null;
+
+                const remainingCents = refunding
+                  ? Math.max(0, (refunding.amountCents ?? 0) - (refunding.refundedCents ?? 0))
+                  : 0;
+                const remainingYuan = remainingCents / 100;
+
+                return (
+                  <Form.Item
+                    label="退款金额（元）"
+                    name="amount"
+                    rules={[
+                      { required: true, message: '请输入退款金额' },
+                      {
+                        validator: async (_rule, value) => {
+                          const n = Number(value);
+                          if (!Number.isFinite(n) || n <= 0) throw new Error('退款金额必须大于 0');
+                          if (Math.round(n * 100) > remainingCents) throw new Error('退款金额不能超过可退款金额');
+                        }
+                      }
+                    ]}
+                  >
+                    <InputNumber min={0} precision={2} max={remainingYuan} style={{ width: 220 }} />
+                  </Form.Item>
+                );
+              }}
+            </Form.Item>
           </Form>
         </Modal>
       </div>

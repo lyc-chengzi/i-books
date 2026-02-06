@@ -40,4 +40,12 @@ class Transaction(Base):
     # Transfer only: destination account
     to_bank_account_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("bank_accounts.id"), nullable=True)
 
+    # Refund linkage: when set, this transaction is a refund of another transaction
+    refund_of_transaction_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("transactions.id"),
+        nullable=True,
+        index=True,
+    )
+
     note: Mapped[str | None] = mapped_column(String(1000), nullable=True)

@@ -4,28 +4,19 @@
   transition: background-color 0.2s ease;
 }
 
-.tx-transactions-table .ant-table-tbody > tr.tx-row-zebra > td {
-  background: rgba(0, 0, 0, 0.02);
-}
+/* Fix fixed-column cells becoming visually transparent when horizontally scrolling */
+
 
 .tx-transactions-table .ant-table-tbody > tr.tx-row-flash > td {
   background: rgba(43, 95, 166, 0.10) !important;
 }
 
 .tx-transactions-table .ant-table-tbody > tr.tx-row-selected > td {
-  background: rgba(43, 95, 166, 0.14) !important;
-}
-
-.tx-transactions-table .ant-table-tbody > tr.tx-row-group {
-  background: linear-gradient(135deg, rgba(43, 95, 166, 0.14), rgba(43, 95, 166, 0.06)) !important;
-}
-
-.tx-transactions-table .ant-table-tbody > tr.tx-row-group:hover {
-  background: linear-gradient(135deg, rgba(43, 95, 166, 0.20), rgba(43, 95, 166, 0.10)) !important;
+  background: rgb(246, 226, 234) !important;
 }
 
 .tx-transactions-table .ant-table-tbody > tr.tx-row-group > td {
-  background: transparent !important;
+  background-color: rgb(238, 238, 238) !important;
   font-weight: 650;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
