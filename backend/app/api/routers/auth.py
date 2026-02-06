@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_admin_user
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
@@ -14,16 +14,20 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register")
-def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> UserMe:
+def register(
+    payload: RegisterRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin_user),
+) -> UserMe:
     existing = db.scalar(select(User).where(User.username == payload.username))
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
 
-    user = User(username=payload.username, password_hash=hash_password(payload.password))
+    user = User(username=payload.username, password_hash=hash_password(payload.password), role=User.ROLE_USER)
     db.add(user)
     db.commit()
     db.refresh(user)
-    return UserMe(id=user.id, username=user.username)
+    return UserMe(id=user.id, username=user.username, role=user.role)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -59,4 +63,4 @@ def logout(response: Response) -> dict:
 
 @router.get("/me", response_model=UserMe)
 def me(current_user: User = Depends(get_current_user)) -> UserMe:
-    return UserMe(id=current_user.id, username=current_user.username)
+    return UserMe(id=current_user.id, username=current_user.username, role=getattr(current_user, "role", User.ROLE_USER))

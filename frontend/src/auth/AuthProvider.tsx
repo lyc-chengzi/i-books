@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 export type AuthUser = {
   id: number;
   username: string;
+  role: 'admin' | 'user';
 };
 
 export type AuthContextValue = {

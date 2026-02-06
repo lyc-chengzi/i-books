@@ -9,17 +9,33 @@ from app.models.user import User
 
 
 def ensure_seed_data(db: Session) -> None:
-    # Create a default user + account items when database is empty.
+    # Fail fast if database schema is behind code.
+    engine = db.get_bind()
+    inspector = inspect(engine)
+    if inspector.has_table("users"):
+        cols = {c.get("name") for c in inspector.get_columns("users")}
+        if "role" not in cols:
+            raise RuntimeError(
+                "Database schema is outdated (missing column users.role). "
+                "Run: alembic upgrade head"
+            )
+
+    # Create a default user when database is empty.
     user = db.query(User).first()
     if not user:
-        user = User(username="admin", password_hash=hash_password("admin"))
+        user = User(username="admin", password_hash=hash_password("admin"), role=User.ROLE_ADMIN)
         db.add(user)
         db.commit()
         db.refresh(user)
+    else:
+        # Backward-compatible bootstrap: existing first user should remain admin.
+        if not getattr(user, "role", None):
+            user.role = User.ROLE_ADMIN
+            db.add(user)
+            db.commit()
 
     # If migrations haven't been applied yet, don't fail startup.
-    engine = db.get_bind()
-    if not inspect(engine).has_table("categories"):
+    if not inspector.has_table("categories"):
         return
 
     has_category = db.query(Category).filter(Category.user_id == user.id).first()

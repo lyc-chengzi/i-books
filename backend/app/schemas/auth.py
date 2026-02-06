@@ -20,3 +20,4 @@ class RegisterRequest(BaseModel):
 class UserMe(BaseModel):
     id: int
     username: str
+    role: str

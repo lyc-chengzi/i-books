@@ -43,3 +43,9 @@ def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User inactive")
     return user
+
+
+def require_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    if getattr(current_user, "role", User.ROLE_USER) != User.ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    return current_user

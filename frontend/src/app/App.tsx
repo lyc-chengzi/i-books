@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { RequireAuth } from '../auth/RequireAuth';
+import { RequireAdmin } from '../auth/RequireAdmin';
 import { LoginPage } from '../pages/LoginPage';
 import { RootLayout } from './layouts/RootLayout';
 import { LedgerLayout } from './layouts/LedgerLayout';
@@ -49,7 +50,14 @@ export function App() {
         </Route>
 
         <Route path="config" element={<ConfigLayout />}>
-          <Route path="users" element={<UserPage />} />
+          <Route
+            path="users"
+            element={
+              <RequireAdmin>
+                <UserPage />
+              </RequireAdmin>
+            }
+          />
           <Route path="categories" element={<CategoryPage />} />
           <Route path="bank-accounts" element={<BankAccountPage />} />
         </Route>
