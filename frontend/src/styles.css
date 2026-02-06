@@ -125,15 +125,6 @@ body::after {
   transform: translateY(1px);
 }
 
-/* Antd Modal: blur the background (mask) */
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .ant-modal-root .ant-modal-mask {
-    background: rgba(15, 18, 24, 0.38) !important;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-}
-
 .ant-modal .ant-modal-content,
 .ant-modal-confirm .ant-modal-content {
   border-radius: 16px;

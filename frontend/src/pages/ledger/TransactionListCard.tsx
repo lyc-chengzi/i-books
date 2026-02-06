@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, EditOutlined, ReloadOutlined, RollbackOutlined } from '@ant-design/icons';
-import { App as AntdApp, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Pagination, Radio, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
+import { App as AntdApp, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Pagination, Radio, Select, Space, Switch, Table, Tag, Tooltip, Typography, version } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useRef, useState, type Key } from 'react';
 
@@ -8,6 +8,7 @@ import { CategoryLeafSelect, type CategoryNode, type CategoryType } from '../../
 import { useAuth } from '../../auth/useAuth';
 import { api, getApiErrorMessage } from '../../lib/api';
 
+alert(version);
 type BankAccount = {
   id: number;
   bankName: string;
