@@ -281,7 +281,11 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
       let expenseCents = 0;
       for (const r of children) {
         if (r.type === 'income') incomeCents += r.amountCents ?? 0;
-        else if (r.type === 'expense') expenseCents += r.amountCents ?? 0;
+        else if (r.type === 'expense') {
+          const amount = r.amountCents ?? 0;
+          const refunded = r.refundedCents ?? 0;
+          expenseCents += Math.max(0, amount - refunded);
+        }
       }
       return {
         key: `date:${date}`,

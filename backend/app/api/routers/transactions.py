@@ -133,6 +133,7 @@ def list_transactions(
         raise HTTPException(status_code=400, detail="Invalid pageSize")
 
     filters = [Transaction.user_id == current_user.id]
+    common_filters = [Transaction.user_id == current_user.id]
 
     if type != "all":
         filters.append(Transaction.type == type)
@@ -145,6 +146,8 @@ def list_transactions(
         # Match frontend behavior: if fundingSource filter is used, exclude transfers.
         filters.append(Transaction.type != "transfer")
         filters.append(Transaction.funding_source == fundingSource)
+        common_filters.append(Transaction.type != "transfer")
+        common_filters.append(Transaction.funding_source == fundingSource)
 
     if bankAccountId is not None:
         # Match frontend behavior: include rows where selected bank account is involved (transfer included).
@@ -152,11 +155,17 @@ def list_transactions(
             (Transaction.bank_account_id == bankAccountId)
             | (Transaction.to_bank_account_id == bankAccountId)
         )
+        common_filters.append(
+            (Transaction.bank_account_id == bankAccountId)
+            | (Transaction.to_bank_account_id == bankAccountId)
+        )
 
     if start is not None:
         filters.append(Transaction.occurred_at >= to_utc_naive(start))
+        common_filters.append(Transaction.occurred_at >= to_utc_naive(start))
     if end is not None:
         filters.append(Transaction.occurred_at <= to_utc_naive(end))
+        common_filters.append(Transaction.occurred_at <= to_utc_naive(end))
 
     kw = (keyword or "").strip().lower()
     if kw:
@@ -173,29 +182,57 @@ def list_transactions(
             .exists()
         )
         filters.append(note_match | tag_exists)
+        common_filters.append(note_match | tag_exists)
 
     base = select(Transaction).where(*filters)
 
     total = int(db.scalar(select(func.count()).select_from(base.subquery())) or 0)
 
-    income_cents = int(
+    income_sum = int(
         db.scalar(
             select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
-                *filters,
+                *common_filters,
                 Transaction.type == "income",
             )
         )
         or 0
     )
-    expense_cents = int(
+    expense_sum = int(
         db.scalar(
             select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
-                *filters,
+                *common_filters,
                 Transaction.type == "expense",
             )
         )
         or 0
     )
+
+    # Refunds should reduce expense totals based on the ORIGINAL expense that is being refunded,
+    # not the refund's own occurred_at.
+    expense_ids_subq = (
+        select(Transaction.id)
+        .where(
+            *common_filters,
+            Transaction.type == "expense",
+        )
+        .subquery()
+    )
+    refund_sum = int(
+        db.scalar(
+            select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
+                Transaction.user_id == current_user.id,
+                Transaction.type == "refund",
+                Transaction.refund_of_transaction_id.in_(select(expense_ids_subq.c.id)),
+            )
+        )
+        or 0
+    )
+
+    income_cents = income_sum if type in ("all", "income") else 0
+    if type in ("all", "expense"):
+        expense_cents = max(0, expense_sum - refund_sum)
+    else:
+        expense_cents = 0
 
     rows = db.scalars(
         base.order_by(Transaction.occurred_at.asc(), Transaction.id.asc())
