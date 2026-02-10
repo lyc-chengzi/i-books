@@ -6,3 +6,4 @@ from app.models.category_tag import CategoryTag  # noqa: F401
 from app.models.transaction import Transaction  # noqa: F401
 from app.models.transaction_tag import TransactionTag  # noqa: F401
 from app.models.user import User  # noqa: F401
+from app.models.transaction_audit_log import TransactionAuditLog  # noqa: F401

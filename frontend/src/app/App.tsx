@@ -20,6 +20,7 @@ import { CategoryMonthlyLinePage } from '../pages/stats/CategoryMonthlyLinePage'
 import { BankAccountPage } from '../pages/config/BankAccountPage';
 import { CategoryPage } from '../pages/config/CategoryPage';
 import { UserPage } from '../pages/config/UserPage';
+import { TransactionAuditLogPage } from '../pages/config/TransactionAuditLogPage';
 
 export function App() {
   return (
@@ -50,6 +51,14 @@ export function App() {
         </Route>
 
         <Route path="config" element={<ConfigLayout />}>
+          <Route
+            path="transaction-audit-logs"
+            element={
+              <RequireAdmin>
+                <TransactionAuditLogPage />
+              </RequireAdmin>
+            }
+          />
           <Route
             path="users"
             element={

@@ -17,7 +17,7 @@ class TransactionCreate(BaseModel):
 
     tagIds: list[int] = Field(default_factory=list)
 
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class TransactionOut(BaseModel):
@@ -42,6 +42,8 @@ class TransactionUpdate(BaseModel):
     occurredAt: datetime | None = None
     categoryId: int | None = None
     tagIds: list[int] | None = None
+    # When provided as an empty string, backend will treat it as clearing the note.
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class TransactionListOut(BaseModel):

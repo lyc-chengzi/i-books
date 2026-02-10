@@ -8,6 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.audit_log import add_transaction_audit_log, build_transaction_snapshot
 from app.core.datetime_utils import as_utc, to_utc_naive
 from app.models.bank_account import BankAccount
 from app.models.category import Category
@@ -375,6 +376,18 @@ def create_transaction(
     for tag_id in tag_ids:
         db.add(TransactionTag(transaction_id=row.id, tag_id=tag_id))
 
+    after = build_transaction_snapshot(row, tag_ids=tag_ids, tag_names=tag_names)
+    add_transaction_audit_log(
+        db,
+        action="create",
+        actor_user_id=current_user.id,
+        target_user_id=current_user.id,
+        transaction_id=row.id,
+        tx_type=row.type,
+        before=None,
+        after=after,
+    )
+
     if bank is not None:
         db.add(bank)
 
@@ -475,6 +488,19 @@ def create_refund(
         note=note,
     )
     db.add_all([row, bank])
+    db.flush()
+
+    after = build_transaction_snapshot(row, tag_ids=[], tag_names=[])
+    add_transaction_audit_log(
+        db,
+        action="create",
+        actor_user_id=current_user.id,
+        target_user_id=current_user.id,
+        transaction_id=row.id,
+        tx_type=row.type,
+        before=None,
+        after=after,
+    )
     db.commit()
     db.refresh(row)
 
@@ -507,6 +533,11 @@ def update_transaction(
     if not row or row.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
+    before_tag_map, before_tag_name_map = _load_tx_tags(db, [row.id])
+    before_tag_ids = before_tag_map.get(row.id, [])
+    before_tag_names = before_tag_name_map.get(row.id, [])
+    before = build_transaction_snapshot(row, tag_ids=before_tag_ids, tag_names=before_tag_names)
+
     if row.type == "transfer":
         raise HTTPException(status_code=400, detail="Transfer is not editable")
     if row.type == "refund":
@@ -514,6 +545,10 @@ def update_transaction(
 
     if payload.occurredAt is not None:
         row.occurred_at = to_utc_naive(payload.occurredAt)
+
+    if payload.note is not None:
+        note = str(payload.note)
+        row.note = note.strip() or None
 
     category = None
     if payload.categoryId is not None:
@@ -535,6 +570,20 @@ def update_transaction(
         db.execute(delete(TransactionTag).where(TransactionTag.transaction_id == row.id))
         for tag_id in tag_ids:
             db.add(TransactionTag(transaction_id=row.id, tag_id=tag_id))
+
+    after_tag_ids = tag_ids if payload.tagIds is not None else before_tag_ids
+    after_tag_names = tag_names if payload.tagIds is not None else before_tag_names
+    after = build_transaction_snapshot(row, tag_ids=after_tag_ids, tag_names=after_tag_names)
+    add_transaction_audit_log(
+        db,
+        action="update",
+        actor_user_id=current_user.id,
+        target_user_id=current_user.id,
+        transaction_id=row.id,
+        tx_type=row.type,
+        before=before,
+        after=after,
+    )
 
     db.add(row)
     db.commit()
@@ -572,6 +621,11 @@ def delete_transaction(
     row = db.get(Transaction, tx_id)
     if not row or row.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+    before_tag_map, before_tag_name_map = _load_tx_tags(db, [row.id])
+    before_tag_ids = before_tag_map.get(row.id, [])
+    before_tag_names = before_tag_name_map.get(row.id, [])
+    before = build_transaction_snapshot(row, tag_ids=before_tag_ids, tag_names=before_tag_names)
 
     # Prevent deleting a payment that has refunds (keeps linkage and avoids FK errors)
     if getattr(row, "refund_of_transaction_id", None) is None:
@@ -627,6 +681,17 @@ def delete_transaction(
         db.add(bank)
 
     db.execute(delete(TransactionTag).where(TransactionTag.transaction_id == row.id))
+
+    add_transaction_audit_log(
+        db,
+        action="delete",
+        actor_user_id=current_user.id,
+        target_user_id=current_user.id,
+        transaction_id=row.id,
+        tx_type=row.type,
+        before=before,
+        after=None,
+    )
     db.delete(row)
     db.commit()
     return {"ok": True}

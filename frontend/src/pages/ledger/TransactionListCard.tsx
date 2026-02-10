@@ -99,7 +99,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionRow | null>(null);
   const [editTopLevelExpenseCategoryId, setEditTopLevelExpenseCategoryId] = useState<number | null>(null);
-  const [editForm] = Form.useForm<{ occurredAt: Dayjs; categoryId: number; tagIds?: number[] }>();
+  const [editForm] = Form.useForm<{ occurredAt: Dayjs; categoryId: number; tagIds?: number[]; note?: string }>();
 
   const [refundOpen, setRefundOpen] = useState(false);
   const [refunding, setRefunding] = useState<TransactionRow | null>(null);
@@ -195,11 +195,12 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   const thisWeekEnd = useMemo(() => thisWeekStart.add(6, 'day').endOf('day'), [thisWeekStart]);
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: { id: number; occurredAt?: string; categoryId?: number; tagIds?: number[] }) => {
+    mutationFn: async (payload: { id: number; occurredAt?: string; categoryId?: number; tagIds?: number[]; note?: string }) => {
       return api.patch<TransactionRow>(`/ledger/transactions/${payload.id}`, {
         occurredAt: payload.occurredAt,
         categoryId: payload.categoryId,
-        tagIds: payload.tagIds
+        tagIds: payload.tagIds,
+        note: payload.note
       }, { token: auth.token });
     },
     onSuccess: async () => {
@@ -683,7 +684,8 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                         editForm.setFieldsValue({
                           occurredAt: dayjs(row.occurredAt),
                           categoryId: row.categoryId ?? undefined,
-                          tagIds: row.tagIds ?? []
+                          tagIds: row.tagIds ?? [],
+                          note: row.note ?? ''
                         } as any);
                       }}
                     />
@@ -784,7 +786,8 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
               const payload: any = {
                 id: editing.id,
                 occurredAt: v.occurredAt?.toISOString(),
-                categoryId: v.categoryId
+                categoryId: v.categoryId,
+                note: (v.note ?? '').trim()
               };
               if (editing.type === 'expense') payload.tagIds = v.tagIds ?? [];
 
@@ -828,6 +831,10 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                 />
               </Form.Item>
             ) : null}
+
+            <Form.Item label="备注" name="note">
+              <Input.TextArea rows={3} placeholder="可选" maxLength={1000} showCount />
+            </Form.Item>
           </Form>
         </Modal>
 

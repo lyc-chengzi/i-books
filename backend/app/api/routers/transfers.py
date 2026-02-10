@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.audit_log import add_transaction_audit_log, build_transaction_snapshot
 from app.core.datetime_utils import as_utc, to_utc_naive
 from app.models.bank_account import BankAccount
 from app.models.transaction import Transaction
@@ -50,6 +51,19 @@ def create_transfer(
         note=payload.note,
     )
     db.add_all([row, from_acct, to_acct])
+    db.flush()
+
+    after = build_transaction_snapshot(row, tag_ids=[], tag_names=[])
+    add_transaction_audit_log(
+        db,
+        action="create",
+        actor_user_id=current_user.id,
+        target_user_id=current_user.id,
+        transaction_id=row.id,
+        tx_type=row.type,
+        before=None,
+        after=after,
+    )
     db.commit()
     db.refresh(row)
 

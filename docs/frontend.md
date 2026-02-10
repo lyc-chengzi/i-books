@@ -102,6 +102,11 @@
   - 新增用户：用户名、初始密码、角色、时区、启用
   - 列表：编辑角色/时区/启用状态；可选重置密码
 
+- 流水日志（仅管理员）：`/config/transaction-audit-logs`
+  - 列表：按时间倒序展示“流水新增/修改/删除”的审计日志
+  - 详情：展开行可查看 `before/after` 快照（JSON）
+  - 说明：该页面数据来源于后端管理员接口 `GET /api/admin/transaction-audit-logs`
+
 ---
 
 ## 2. 路由与布局结构
@@ -122,6 +127,7 @@
   - `/config/bank-accounts`
   - `/config/categories`
   - `/config/users`（管理员）
+  - `/config/transaction-audit-logs`（管理员）
 
 布局说明：
 - RootLayout：顶部主导航（记账/统计/配置）+ 用户菜单（退出登录）+ Drawer 侧边导航（移动端/窄屏）

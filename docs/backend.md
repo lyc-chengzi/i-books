@@ -176,6 +176,19 @@ Cookie 模式（用于本地部署体验）：
 - `category_tags`：绑定到“费用一级分类（expense 根的直接子类）”
 - `transaction_tags`：流水与标签多对多（联合主键：`transaction_id + tag_id`）
 
+### 6.6 transaction_audit_logs（流水审计日志）
+
+用于记录“流水的新增/编辑/删除”操作历史，便于管理员追溯。
+
+- 记录维度：仅记录 `transactions` 的变更（包含 income/expense/transfer/refund 的 create，以及 income/expense 的 update，和所有类型的 delete）
+- 日志保留：`transaction_id` 不做外键约束（避免流水删除后日志被级联删除）
+- 字段：
+  - `action`：`create|update|delete`
+  - `actor_user_id`：执行操作的用户
+  - `target_user_id`：被影响账本所属用户（一般等于 transaction.user_id）
+  - `transaction_id` / `tx_type`
+  - `before_json` / `after_json`：变更前后快照（JSON 文本；包含 occurredAt、amount、分类、资金来源、账户、标签等）
+
 ---
 
 ## 7. API 路由概览
@@ -212,6 +225,13 @@ Cookie 模式（用于本地部署体验）：
 - `GET /api/stats/month-category`：月度分类统计（收入/支出）
 - `GET /api/stats/yoy-monthly`：同比（按月 + 分类）
 - `GET /api/stats/monthly-range`：月份范围内按月收入/支出折线
+
+### 7.5 admin
+
+- `GET /api/admin/transaction-audit-logs`：流水审计日志（管理员）
+  - 支持分页：`page`、`pageSize`
+  - 可选排序：`order=asc|desc`（按日志创建时间）
+  - 可选过滤：`action`、`transactionId`、`txType`、`actorUserId`、`targetUserId`、`start`、`end`
 
 ---
 
