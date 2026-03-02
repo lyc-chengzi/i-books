@@ -140,7 +140,7 @@
 
 ### 3.1 API 基础
 - 前端所有 API 统一走 `baseURL: /api`（见 frontend/src/lib/api.ts）
-- dev 环境代理：Vite 将 `/api` 代理到 `http://127.0.0.1:8000`（见 frontend/vite.config.ts）
+- dev 环境代理：Vite 将 `/api` 代理到 `http://127.0.0.1:8010`（见 frontend/vite.config.ts）
 - `credentials: 'include'`：前端请求默认携带 cookie（用于 cookie-based 登录态）
 
 ### 3.2 鉴权方式
@@ -214,7 +214,7 @@
 
 默认：
 - 前端端口：5173
-- `/api` 代理到后端 8000
+- `/api` 代理到后端 8010
 
 ### 5.2 构建
 - `pnpm build` 会先 `tsc -b` 再 `vite build`

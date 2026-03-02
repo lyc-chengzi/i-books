@@ -26,7 +26,7 @@ if (Test-Path $envFile) {
 # Sensible defaults for local deployment
 if (-not $env:IBOOKS_SERVE_FRONTEND) { $env:IBOOKS_SERVE_FRONTEND = 'true' }
 if (-not $env:IBOOKS_FRONTEND_DIST_DIR) { $env:IBOOKS_FRONTEND_DIST_DIR = '../frontend/dist' }
-if (-not $env:IBOOKS_CORS_ORIGINS) { $env:IBOOKS_CORS_ORIGINS = 'http://localhost:8000,http://127.0.0.1:8000' }
+if (-not $env:IBOOKS_CORS_ORIGINS) { $env:IBOOKS_CORS_ORIGINS = 'http://localhost:8010,http://127.0.0.1:8010' }
 
-Write-Host "[iBooks] Starting backend on http://localhost:8000" -ForegroundColor Cyan
-& $pythonExe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Write-Host "[iBooks] Starting backend on http://localhost:8010" -ForegroundColor Cyan
+& $pythonExe -m uvicorn app.main:app --host 127.0.0.1 --port 8010

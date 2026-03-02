@@ -18,7 +18,7 @@
 在 `backend` 目录：
 - 创建虚拟环境并安装依赖：`pip install -r requirements.txt`
 - 初始化表结构（首次运行或变更后）：`alembic upgrade head`
-- 启动：`uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`
+- 启动：`uvicorn app.main:app --reload --host 127.0.0.1 --port 8010`
 
 ### 常见问题：`alembic upgrade head` 连接失败
 
@@ -37,11 +37,11 @@
 - 安装依赖：`pnpm install`（或 `npm install`）
 - 启动：`pnpm dev`（或 `npm run dev`）
 
-前端默认代理 `/api` 到 `http://127.0.0.1:8000`。
+前端默认代理 `/api` 到 `http://127.0.0.1:8010`。
 
 ## 本机部署（不需要每次跑开发命令）
 
-目标：前端打包成静态文件，后端 FastAPI 直接托管 `frontend/dist`，你只需要启动一个后端进程，然后访问 `http://localhost:8000`。
+目标：前端打包成静态文件，后端 FastAPI 直接托管 `frontend/dist`，你只需要启动一个后端进程，然后访问 `http://localhost:8010`。
 
 1) 配置后端环境变量
 - 复制 [backend/.env.example](backend/.env.example) 为 `backend/.env`
@@ -53,7 +53,7 @@
 在仓库根目录运行（PowerShell）：
 - `powershell -ExecutionPolicy Bypass -File .\deploy\windows\run-local.ps1`
 
-运行后打开：`http://localhost:8000`
+运行后打开：`http://localhost:8010`
 
 3) 可选：开机/登录自动启动（Task Scheduler）
 

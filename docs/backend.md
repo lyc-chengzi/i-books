@@ -85,7 +85,7 @@ Cookie 模式（用于本地部署体验）：
 
 ### 3.3 CORS 与静态托管前端
 
-- `IBOOKS_CORS_ORIGINS`：逗号分隔；默认允许本地 5173/8000
+- `IBOOKS_CORS_ORIGINS`：逗号分隔；默认允许本地 5173/8010
 - `IBOOKS_SERVE_FRONTEND`：是否由后端托管 Vite 构建产物（默认 `False`）
 - `IBOOKS_FRONTEND_DIST_DIR`：默认 `../frontend/dist`（支持相对/绝对路径）
 
