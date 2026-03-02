@@ -17,6 +17,7 @@ import { TransactionListPage } from '../pages/ledger/TransactionListPage';
 import { YearCategoryStatsPage } from '../pages/stats/YearCategoryStatsPage';
 import { YoYStatsPage } from '../pages/stats/YoYStatsPage';
 import { CategoryMonthlyLinePage } from '../pages/stats/CategoryMonthlyLinePage';
+import { ExpenseStatsPage } from '../pages/stats/ExpenseStatsPage';
 
 import { BankAccountPage } from '../pages/config/BankAccountPage';
 import { CategoryPage } from '../pages/config/CategoryPage';
@@ -51,6 +52,7 @@ export function App() {
           <Route path="year-category" element={<YearCategoryStatsPage />} />
           <Route path="yoy" element={<YoYStatsPage />} />
           <Route path="category-monthly" element={<CategoryMonthlyLinePage />} />
+          <Route path="expense" element={<ExpenseStatsPage />} />
         </Route>
 
         <Route path="config" element={<ConfigLayout />}>

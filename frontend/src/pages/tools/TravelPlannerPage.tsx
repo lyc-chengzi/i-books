@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { Button, Input, Select, Space, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -41,6 +42,8 @@ export function TravelPlannerPage() {
   const [viewMonth, setViewMonth] = useState(() => dayjs().startOf('month'));
   const [editingDateKey, setEditingDateKey] = useState<string | null>(null);
   const [plans, setPlans] = useState<PlanMap>({});
+  const [isArranging, setIsArranging] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const saveTimersRef = useRef<Record<string, number>>({});
 
@@ -171,26 +174,176 @@ export function TravelPlannerPage() {
     upsertMutation.mutate({ date: dateKey, is_rest_day: nextIsRestDay, am, pm });
   };
 
+  const isBlank = (v: string | undefined) => !(v ?? '').trim();
+
+  const handleOneClickArrange = async () => {
+    if (isArranging) return;
+    setEditingDateKey(null);
+    setIsArranging(true);
+
+    try {
+      const days = viewMonth.daysInMonth();
+      const changed: Array<{ dateKey: string; next: DayPlan }> = [];
+
+      for (let dayNumber = 1; dayNumber <= days; dayNumber++) {
+        const date = viewMonth.date(dayNumber);
+        const dateKey = date.format('YYYY-MM-DD');
+        const dow = date.day(); // 0=Sun..6=Sat
+
+        const current = plans[dateKey] ?? {};
+        const isRestDay = !!current.isRestDay;
+        const hasAnyPlan = !isBlank(current.am) || !isBlank(current.pm);
+        const isEmptyPlan = !hasAnyPlan;
+
+        // Rule 1: set Sat/Sun as rest day by default (avoid overwriting existing plans)
+        if ((dow === 0 || dow === 6) && !isRestDay && isEmptyPlan) {
+          changed.push({ dateKey, next: { isRestDay: true, am: undefined, pm: undefined } });
+          continue;
+        }
+
+        // Rule 2: for days with no plans and not rest day
+        if (isRestDay || !isEmptyPlan) continue;
+
+        let nextAm: string | undefined;
+        let nextPm: string | undefined;
+
+        if (dow === 1) {
+          // Monday
+          nextAm = '上班';
+          nextPm = '回家';
+        } else if (dow === 2) {
+          // Tuesday
+          nextAm = '上班';
+        } else if (dow === 5) {
+          // Friday
+          nextPm = '回家';
+        }
+
+        if (nextAm || nextPm) {
+          changed.push({ dateKey, next: { ...current, isRestDay: false, am: nextAm, pm: nextPm } });
+        }
+      }
+
+      if (!changed.length) return;
+
+      // Cancel pending debounced saves for affected dates.
+      for (const it of changed) {
+        const pending = saveTimersRef.current[it.dateKey];
+        if (pending) {
+          window.clearTimeout(pending);
+          delete saveTimersRef.current[it.dateKey];
+        }
+      }
+
+      // Update local state immediately.
+      setPlans((prev) => {
+        const next = { ...prev };
+        for (const it of changed) next[it.dateKey] = it.next;
+        return next;
+      });
+
+      // Persist (sequentially, to keep server load predictable)
+      for (const it of changed) {
+        const is_rest_day = !!it.next.isRestDay;
+        const am = is_rest_day ? null : (it.next.am ?? '').trim() || null;
+        const pm = is_rest_day ? null : (it.next.pm ?? '').trim() || null;
+        // Use direct API call (avoid invalidating per-row via mutation callbacks)
+        await api.put('/tools/travel-plans', { date: it.dateKey, is_rest_day, am, pm }, { token: auth.token });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['tools', 'travel-plans', year, monthIndex + 1] });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(getApiErrorMessage(err));
+    } finally {
+      setIsArranging(false);
+    }
+  };
+
+  const handleClearArrange = async () => {
+    if (isClearing) return;
+    setEditingDateKey(null);
+    setIsClearing(true);
+
+    try {
+      const days = viewMonth.daysInMonth();
+      const toDelete: string[] = [];
+
+      for (let dayNumber = 1; dayNumber <= days; dayNumber++) {
+        const date = viewMonth.date(dayNumber);
+        const dateKey = date.format('YYYY-MM-DD');
+        const current = plans[dateKey];
+        if (!current) continue;
+
+        const hasAnyPlan = !isBlank(current.am) || !isBlank(current.pm);
+        const isRestDay = !!current.isRestDay;
+        if (hasAnyPlan || isRestDay) toDelete.push(dateKey);
+      }
+
+      if (!toDelete.length) return;
+
+      for (const dateKey of toDelete) {
+        const pending = saveTimersRef.current[dateKey];
+        if (pending) {
+          window.clearTimeout(pending);
+          delete saveTimersRef.current[dateKey];
+        }
+      }
+
+      setPlans((prev) => {
+        const next = { ...prev };
+        for (const k of toDelete) delete next[k];
+        return next;
+      });
+
+      for (const dateKey of toDelete) {
+        await api.put(
+          '/tools/travel-plans',
+          { date: dateKey, is_rest_day: false, am: null, pm: null },
+          { token: auth.token }
+        );
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['tools', 'travel-plans', year, monthIndex + 1] });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(getApiErrorMessage(err));
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   return (
     <div className="travelPlanner">
       <div className="travelPlanner__header">
         <Space size={10} wrap>
+          <Button type="primary" loading={isArranging} onClick={handleOneClickArrange}>
+            一键安排
+          </Button>
+
+          <Button loading={isClearing} onClick={handleClearArrange}>
+            取消安排
+          </Button>
+
           <Button
+            aria-label="上一月"
+            icon={<LeftOutlined />}
             onClick={() => {
               setViewMonth((m) => m.subtract(1, 'month').startOf('month'));
               setEditingDateKey(null);
             }}
-          >
-            上一月
-          </Button>
+          />
+
+          <Typography.Text strong>{title}</Typography.Text>
+
           <Button
+            aria-label="下一月"
+            icon={<RightOutlined />}
             onClick={() => {
               setViewMonth((m) => m.add(1, 'month').startOf('month'));
               setEditingDateKey(null);
             }}
-          >
-            下一月
-          </Button>
+          />
 
           <Select
             value={year}
@@ -201,132 +354,136 @@ export function TravelPlannerPage() {
               setEditingDateKey(null);
             }}
           />
-
-          <Typography.Text strong>{title}</Typography.Text>
         </Space>
       </div>
 
-      <div className="travelPlanner__grid">
-        {weekHeaders.map((w) => (
-          <div key={w} className="travelPlanner__weekHeader">
-            {w}
-          </div>
-        ))}
+      <div className="travelPlanner__calendar">
+        <div className="travelPlanner__weekRow">
+          {weekHeaders.map((w) => (
+            <div key={w} className="travelPlanner__weekHeader">
+              {w}
+            </div>
+          ))}
+        </div>
 
-        {Array.from({ length: cells }).map((_, i) => {
-          const dayNumber = i - leading + 1;
-          const inMonth = dayNumber >= 1 && dayNumber <= daysInMonth;
+        <div className="travelPlanner__dates">
+          <div className="travelPlanner__datesGrid">
+            {Array.from({ length: cells }).map((_, i) => {
+              const dayNumber = i - leading + 1;
+              const inMonth = dayNumber >= 1 && dayNumber <= daysInMonth;
 
-          if (!inMonth) {
-            return <div key={i} className="travelPlanner__cell travelPlanner__cell--empty" />;
-          }
+              if (!inMonth) {
+                return <div key={i} className="travelPlanner__cell travelPlanner__cell--empty" />;
+              }
 
-          const date = viewMonth.date(dayNumber);
-          const dateKey = date.format('YYYY-MM-DD');
-          const plan = plans[dateKey] ?? {};
-          const isEditing = editingDateKey === dateKey;
-          const isRestDay = !!plan.isRestDay;
+              const date = viewMonth.date(dayNumber);
+              const dateKey = date.format('YYYY-MM-DD');
+              const plan = plans[dateKey] ?? {};
+              const isEditing = editingDateKey === dateKey;
+              const isRestDay = !!plan.isRestDay;
 
-          return (
-            <div
-              key={dateKey}
-              className={`travelPlanner__cell${isRestDay ? ' travelPlanner__cell--rest' : ''}`}
-              onDoubleClick={() => {
-                if (!isRestDay) setEditingDateKey(dateKey);
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                toggleRestDay(dateKey);
-              }}
-            >
-              <div className="travelPlanner__cellTop">
-                <Typography.Text strong>{dayNumber}</Typography.Text>
-                {isRestDay ? (
-                  <Typography.Text type="secondary" className="travelPlanner__restLabel">
-                    休息日
-                  </Typography.Text>
-                ) : null}
-              </div>
+              return (
+                <div
+                  key={dateKey}
+                  className={`travelPlanner__cell${isRestDay ? ' travelPlanner__cell--rest' : ''}`}
+                  onDoubleClick={() => {
+                    if (!isRestDay) setEditingDateKey(dateKey);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    toggleRestDay(dateKey);
+                  }}
+                >
+                  <div className="travelPlanner__cellTop">
+                    <Typography.Text strong>{dayNumber}</Typography.Text>
+                    {isRestDay ? (
+                      <Typography.Text type="secondary" className="travelPlanner__restLabel">
+                        休息日
+                      </Typography.Text>
+                    ) : null}
+                  </div>
 
-              {isEditing ? (
-                <div className="travelPlanner__editor">
-                  <Input
-                    value={plan.am ?? ''}
-                    placeholder="上午"
-                    disabled={isRestDay}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setPlans((prev) => ({
-                        ...prev,
-                        [dateKey]: {
-                          ...prev[dateKey],
-                          am: value
-                        }
-                      }));
-                      scheduleSave(dateKey, { ...plan, am: value, isRestDay });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape' || e.key === 'Enter') {
-                        e.preventDefault();
-                        flushSave(dateKey);
-                        setEditingDateKey(null);
-                      }
-                    }}
-                    onBlur={() => flushSave(dateKey)}
-                  />
+                  {isEditing ? (
+                    <div className="travelPlanner__editor">
+                      <Input
+                        value={plan.am ?? ''}
+                        placeholder="上午"
+                        disabled={isRestDay}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setPlans((prev) => ({
+                            ...prev,
+                            [dateKey]: {
+                              ...prev[dateKey],
+                              am: value
+                            }
+                          }));
+                          scheduleSave(dateKey, { ...plan, am: value, isRestDay });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape' || e.key === 'Enter') {
+                            e.preventDefault();
+                            flushSave(dateKey);
+                            setEditingDateKey(null);
+                          }
+                        }}
+                        onBlur={() => flushSave(dateKey)}
+                      />
 
-                  <Input
-                    value={plan.pm ?? ''}
-                    placeholder="下午"
-                    disabled={isRestDay}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setPlans((prev) => ({
-                        ...prev,
-                        [dateKey]: {
-                          ...prev[dateKey],
-                          pm: value
-                        }
-                      }));
-                      scheduleSave(dateKey, { ...plan, pm: value, isRestDay });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape' || e.key === 'Enter') {
-                        e.preventDefault();
-                        flushSave(dateKey);
-                        setEditingDateKey(null);
-                      }
-                    }}
-                    onBlur={() => flushSave(dateKey)}
-                  />
-                </div>
-              ) : (
-                <div className="travelPlanner__summary">
-                  {isRestDay ? (
-                    <Typography.Text type="secondary" className="travelPlanner__restText">
-                      休息日
-                    </Typography.Text>
+                      <Input
+                        value={plan.pm ?? ''}
+                        placeholder="下午"
+                        disabled={isRestDay}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setPlans((prev) => ({
+                            ...prev,
+                            [dateKey]: {
+                              ...prev[dateKey],
+                              pm: value
+                            }
+                          }));
+                          scheduleSave(dateKey, { ...plan, pm: value, isRestDay });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape' || e.key === 'Enter') {
+                            e.preventDefault();
+                            flushSave(dateKey);
+                            setEditingDateKey(null);
+                          }
+                        }}
+                        onBlur={() => flushSave(dateKey)}
+                      />
+                    </div>
                   ) : (
-                    <>
-                      <div className="travelPlanner__summaryRow">
-                        <Typography.Text type="secondary">上午</Typography.Text>
-                        <Typography.Text className="travelPlanner__summaryText travelPlanner__summaryText--am">
-                          {plan.am || '-'}
+                    <div className="travelPlanner__summary">
+                      {isRestDay ? (
+                        <Typography.Text type="secondary" className="travelPlanner__restText">
+                          休息日
                         </Typography.Text>
-                      </div>
-                      <div className="travelPlanner__summaryRow">
-                        <Typography.Text type="secondary">下午</Typography.Text>
-                        <Typography.Text className="travelPlanner__summaryText travelPlanner__summaryText--pm">
-                          {plan.pm || '-'}
-                        </Typography.Text>
-                      </div>
-                    </>
+                      ) : (
+                        <>
+                          <div className="travelPlanner__summaryRow">
+                            <Typography.Text type="secondary">上午</Typography.Text>
+                            <Typography.Text className="travelPlanner__summaryText travelPlanner__summaryText--am">
+                              {plan.am || '-'}
+                            </Typography.Text>
+                          </div>
+                          <div className="travelPlanner__summaryRow">
+                            <Typography.Text type="secondary">下午</Typography.Text>
+                            <Typography.Text className="travelPlanner__summaryText travelPlanner__summaryText--pm">
+                              {plan.pm || '-'}
+                            </Typography.Text>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <Typography.Text type="secondary" className="travelPlanner__hint">

@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import get_current_user, get_db
 from app.core.datetime_utils import to_utc_naive
+from app.models.category import Category
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.stats import (
+    ExpenseItemStatsOut,
     MonthCategoryCompare,
     MonthCategoryStatsOut,
     MonthlyInOut,
@@ -21,6 +23,37 @@ from app.schemas.stats import (
 )
 
 router = APIRouter(prefix="/stats", tags=["stats"])
+
+
+def _descendant_category_ids(db: Session, user_id: int, root_id: int) -> set[int]:
+    root = db.get(Category, root_id)
+    if not root or root.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Category not found")
+    if root.type != "expense":
+        raise HTTPException(status_code=400, detail="Only expense categories are supported")
+
+    rows = db.execute(
+        select(Category.id, Category.parent_id).where(
+            Category.user_id == user_id,
+            Category.type == "expense",
+        )
+    ).all()
+
+    children: dict[int | None, list[int]] = {}
+    for cid, pid in rows:
+        children.setdefault(pid, []).append(int(cid))
+
+    out: set[int] = set()
+    stack: list[int] = [int(root_id)]
+    while stack:
+        cur = stack.pop()
+        if cur in out:
+            continue
+        out.add(cur)
+        for child_id in children.get(cur, []):
+            stack.append(int(child_id))
+
+    return out
 
 
 def _merge_net(expense_rows: list[tuple], refund_rows: list[tuple]) -> dict[tuple, int]:
@@ -60,6 +93,107 @@ def _parse_yyyy_mm(value: str) -> tuple[int, int]:
         return int(y), int(m)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid month format (YYYY-MM)")
+
+
+@router.get("/expense-item", response_model=ExpenseItemStatsOut)
+def expense_item_stats(
+    categoryId: int,
+    year: int,
+    month: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ExpenseItemStatsOut:
+    category_ids = _descendant_category_ids(db, current_user.id, int(categoryId))
+
+    scope = "year"
+    if month is None:
+        start, end = _year_bounds_utc_naive(year)
+    else:
+        scope = "month"
+        start, end = _month_bounds_utc_naive(year, int(month))
+
+    expense = aliased(Transaction)
+    refund = aliased(Transaction)
+
+    expense_sum = db.scalar(
+        select(func.coalesce(func.sum(expense.amount_cents), 0)).where(
+            expense.user_id == current_user.id,
+            expense.type == "expense",
+            expense.category_id.in_(category_ids),
+            expense.occurred_at >= to_utc_naive(start),
+            expense.occurred_at < to_utc_naive(end),
+        )
+    )
+
+    refund_sum = db.scalar(
+        select(func.coalesce(func.sum(refund.amount_cents), 0))
+        .select_from(refund)
+        .join(expense, refund.refund_of_transaction_id == expense.id)
+        .where(
+            refund.user_id == current_user.id,
+            refund.type == "refund",
+            expense.user_id == current_user.id,
+            expense.type == "expense",
+            expense.category_id.in_(category_ids),
+            expense.occurred_at >= to_utc_naive(start),
+            expense.occurred_at < to_utc_naive(end),
+        )
+    )
+
+    expense_rows = db.execute(
+        select(expense.category_id, func.coalesce(func.sum(expense.amount_cents), 0))
+        .where(
+            expense.user_id == current_user.id,
+            expense.type == "expense",
+            expense.category_id.is_not(None),
+            expense.category_id.in_(category_ids),
+            expense.occurred_at >= to_utc_naive(start),
+            expense.occurred_at < to_utc_naive(end),
+        )
+        .group_by(expense.category_id)
+    ).all()
+
+    refund_rows = db.execute(
+        select(expense.category_id, func.coalesce(func.sum(refund.amount_cents), 0))
+        .select_from(refund)
+        .join(expense, refund.refund_of_transaction_id == expense.id)
+        .where(
+            refund.user_id == current_user.id,
+            refund.type == "refund",
+            expense.user_id == current_user.id,
+            expense.type == "expense",
+            expense.category_id.is_not(None),
+            expense.category_id.in_(category_ids),
+            expense.occurred_at >= to_utc_naive(start),
+            expense.occurred_at < to_utc_naive(end),
+        )
+        .group_by(expense.category_id)
+    ).all()
+
+    expense_kv = [(int(cid), int(amt or 0)) for cid, amt in expense_rows if cid is not None]
+    refund_kv = [(int(cid), int(amt or 0)) for cid, amt in refund_rows if cid is not None]
+    net_map = _merge_net(expense_kv, refund_kv)
+    breakdown = [
+        {"categoryId": int(cid), "amountCents": max(0, int(net_amt or 0))}
+        for (cid,), net_amt in net_map.items()
+    ]
+    breakdown.sort(key=lambda x: int(x["amountCents"]), reverse=True)
+
+    expense_cents = int(expense_sum or 0)
+    refund_cents = int(refund_sum or 0)
+    net_cents = max(0, expense_cents - refund_cents)
+
+    return ExpenseItemStatsOut(
+        scope=scope,
+        year=year,
+        month=int(month) if month is not None else None,
+        categoryId=int(categoryId),
+        expenseCents=expense_cents,
+        refundCents=refund_cents,
+        netCents=net_cents,
+        totalCents=net_cents,
+        breakdown=breakdown,
+    )
 
 
 @router.get("/year-category", response_model=YearCategoryStatsOut)

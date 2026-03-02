@@ -28,6 +28,18 @@ class MonthCategoryStatsOut(BaseModel):
     breakdown: list[CategoryAmount]
 
 
+class ExpenseItemStatsOut(BaseModel):
+    scope: str = Field(pattern="^(year|month)$")
+    year: int
+    month: int | None = Field(default=None, ge=1, le=12)
+    categoryId: int
+    expenseCents: int
+    refundCents: int
+    netCents: int
+    totalCents: int
+    breakdown: list[CategoryAmount]
+
+
 class MonthlyInOut(BaseModel):
     month: str = Field(description="YYYY-MM")
     incomeCents: int
