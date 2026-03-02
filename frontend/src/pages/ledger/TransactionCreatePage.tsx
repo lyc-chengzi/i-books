@@ -196,7 +196,7 @@ export function TransactionCreatePage() {
         initialValues={{
           type: 'expense',
           fundingSource: 'bank',
-          occurredAt: dayjs()
+          occurredAt: dayjs().startOf('day')
         }}
         onFinish={async (values: FormValues) => {
           if (saving) return;
@@ -205,7 +205,7 @@ export function TransactionCreatePage() {
             const payload = {
               type: values.type,
               amountCents: Math.round((values.amount as number) * 100),
-              occurredAt: values.occurredAt.toISOString(),
+              occurredAt: values.occurredAt.startOf('day').toISOString(),
               categoryId: values.categoryId,
               fundingSource: values.fundingSource,
               bankAccountId: values.fundingSource === 'bank' ? values.bankAccountId : null,
@@ -235,12 +235,12 @@ export function TransactionCreatePage() {
           />
         </Form.Item>
 
-        <Form.Item label="金额（元）" name="amount" rules={[{ required: true }]}>
-          <InputNumber min={0} precision={2} style={{ width: 220 }} />
+        <Form.Item label="发生时间" name="occurredAt" rules={[{ required: true }]}>
+          <DatePicker format="YYYY-MM-DD" style={{ width: 260 }} />
         </Form.Item>
 
-        <Form.Item label="发生时间" name="occurredAt" rules={[{ required: true }]}>
-          <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY-MM-DD HH:mm" style={{ width: 260 }} />
+        <Form.Item label="金额（元）" name="amount" rules={[{ required: true }]}>
+          <InputNumber min={0} precision={2} style={{ width: 220 }} />
         </Form.Item>
 
 

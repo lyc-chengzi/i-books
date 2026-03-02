@@ -1,4 +1,4 @@
-import { BarChartOutlined, CreditCardOutlined, MenuOutlined, SettingOutlined } from '@ant-design/icons';
+import { BarChartOutlined, CreditCardOutlined, MenuOutlined, SettingOutlined, ToolOutlined } from '@ant-design/icons';
 import { Avatar, Button, Drawer, Dropdown, Menu, Space, Typography } from 'antd';
 import type { MouseEvent } from 'react';
 import { useMemo, useState } from 'react';
@@ -8,11 +8,12 @@ import { useAuth } from '../../auth/useAuth';
 
 import './root-layout.css';
 
-type TopKey = 'ledger' | 'stats' | 'config';
+type TopKey = 'ledger' | 'stats' | 'config' | 'tools';
 
 function getTopKey(pathname: string): TopKey {
   if (pathname.startsWith('/stats')) return 'stats';
   if (pathname.startsWith('/config')) return 'config';
+  if (pathname.startsWith('/tools')) return 'tools';
   return 'ledger';
 }
 
@@ -29,7 +30,8 @@ export function RootLayout() {
     () => [
       { key: 'ledger', label: '记账', icon: <CreditCardOutlined /> },
       { key: 'stats', label: '统计', icon: <BarChartOutlined /> },
-      { key: 'config', label: '配置', icon: <SettingOutlined /> }
+      { key: 'config', label: '配置', icon: <SettingOutlined /> },
+      { key: 'tools', label: '工具', icon: <ToolOutlined /> }
     ],
     []
   );
@@ -38,6 +40,7 @@ export function RootLayout() {
     if (key === 'ledger') navigate('/ledger/expense/new');
     if (key === 'stats') navigate('/stats/year-category');
     if (key === 'config') navigate('/config/bank-accounts');
+    if (key === 'tools') navigate('/tools/travel-planner');
     setNavOpen(false);
   };
 

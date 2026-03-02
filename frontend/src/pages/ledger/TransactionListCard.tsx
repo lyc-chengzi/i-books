@@ -785,7 +785,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
 
               const payload: any = {
                 id: editing.id,
-                occurredAt: v.occurredAt?.toISOString(),
+                occurredAt: v.occurredAt?.startOf('day').toISOString(),
                 categoryId: v.categoryId,
                 note: (v.note ?? '').trim()
               };
@@ -799,7 +799,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
         >
           <Form form={editForm} layout="vertical">
             <Form.Item label="发生时间" name="occurredAt" rules={[{ required: true }]}>
-              <DatePicker showTime={{ format: 'HH:mm' }} format="YYYY-MM-DD HH:mm" style={{ width: '100%' }} />
+              <DatePicker format="YYYY-MM-DD" style={{ width: '100%' }} />
             </Form.Item>
 
             <Form.Item label={editing?.type === 'income' ? '收入分类' : '费用分类'} name="categoryId" rules={[{ required: true }]}>

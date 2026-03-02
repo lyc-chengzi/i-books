@@ -7,6 +7,7 @@ import { RootLayout } from './layouts/RootLayout';
 import { LedgerLayout } from './layouts/LedgerLayout';
 import { StatsLayout } from './layouts/StatsLayout';
 import { ConfigLayout } from './layouts/ConfigLayout';
+import { ToolsLayout } from './layouts/ToolsLayout';
 
 import { TransactionCreateExpensePage } from '../pages/ledger/TransactionCreateExpensePage';
 import { TransactionCreateIncomePage } from '../pages/ledger/TransactionCreateIncomePage';
@@ -21,6 +22,8 @@ import { BankAccountPage } from '../pages/config/BankAccountPage';
 import { CategoryPage } from '../pages/config/CategoryPage';
 import { UserPage } from '../pages/config/UserPage';
 import { TransactionAuditLogPage } from '../pages/config/TransactionAuditLogPage';
+
+import { TravelPlannerPage } from '../pages/tools/TravelPlannerPage';
 
 export function App() {
   return (
@@ -69,6 +72,10 @@ export function App() {
           />
           <Route path="categories" element={<CategoryPage />} />
           <Route path="bank-accounts" element={<BankAccountPage />} />
+        </Route>
+
+        <Route path="tools" element={<ToolsLayout />}>
+          <Route path="travel-planner" element={<TravelPlannerPage />} />
         </Route>
       </Route>
 
