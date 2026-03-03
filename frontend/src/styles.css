@@ -25,7 +25,7 @@
 
   --app-text: rgba(0, 0, 0, 0.88);
   --app-text-secondary: rgba(0, 0, 0, 0.55);
-  --app-divider: rgba(0, 0, 0, 0.06);
+  --app-divider: rgba(0, 0, 0, 0.1);
 
   /* Accent is driven by Antd token colorPrimary (see ConfigProvider),
      this is only used in pure CSS gradients.

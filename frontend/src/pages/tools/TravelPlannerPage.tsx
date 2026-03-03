@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import { Button, Input, Select, Space, Typography } from 'antd';
+import { Button, Input, Select, Space, Typography, Badge } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -41,11 +41,10 @@ export function TravelPlannerPage() {
 
   const [viewMonth, setViewMonth] = useState(() => dayjs().startOf('month'));
   const [editingDateKey, setEditingDateKey] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState<{ am: string; pm: string } | null>(null);
   const [plans, setPlans] = useState<PlanMap>({});
   const [isArranging, setIsArranging] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-
-  const saveTimersRef = useRef<Record<string, number>>({});
 
   const year = viewMonth.year();
   const monthIndex = viewMonth.month(); // 0-11
@@ -56,12 +55,47 @@ export function TravelPlannerPage() {
     items: Array<{ date: string; is_rest_day: boolean; am: string | null; pm: string | null }>;
   };
 
+  const { leading, daysInMonth, cells } = useMemo(() => buildMonthCells(viewMonth), [viewMonth]);
+  const trailing = useMemo(() => cells - (leading + daysInMonth), [cells, daysInMonth, leading]);
+  const calendarStart = useMemo(
+    () => viewMonth.startOf('month').subtract(leading, 'day'),
+    [viewMonth, leading]
+  );
+
+  const currentWeekIndex = useMemo(() => {
+    const today = dayjs().startOf('day');
+    const diff = today.diff(calendarStart, 'day');
+    if (diff < 0 || diff >= cells) return -1;
+    return Math.floor(diff / 7);
+  }, [calendarStart, cells]);
+
+  const prevMonth = useMemo(() => viewMonth.subtract(1, 'month').startOf('month'), [viewMonth]);
+  const nextMonth = useMemo(() => viewMonth.add(1, 'month').startOf('month'), [viewMonth]);
+
   const monthQuery = useQuery({
     queryKey: ['tools', 'travel-plans', year, monthIndex + 1],
     queryFn: () =>
       api.get<MonthOut>(`/tools/travel-plans?year=${year}&month=${monthIndex + 1}`, {
         token: auth.token
       })
+  });
+
+  const prevMonthQuery = useQuery({
+    queryKey: ['tools', 'travel-plans', prevMonth.year(), prevMonth.month() + 1],
+    queryFn: () =>
+      api.get<MonthOut>(`/tools/travel-plans?year=${prevMonth.year()}&month=${prevMonth.month() + 1}`, {
+        token: auth.token
+      }),
+    enabled: leading > 0
+  });
+
+  const nextMonthQuery = useQuery({
+    queryKey: ['tools', 'travel-plans', nextMonth.year(), nextMonth.month() + 1],
+    queryFn: () =>
+      api.get<MonthOut>(`/tools/travel-plans?year=${nextMonth.year()}&month=${nextMonth.month() + 1}`, {
+        token: auth.token
+      }),
+    enabled: trailing > 0
   });
 
   const upsertMutation = useMutation({
@@ -79,8 +113,14 @@ export function TravelPlannerPage() {
   });
 
   useEffect(() => {
-    // Populate local cache from server when month loads.
-    const items = monthQuery.data?.items ?? [];
+    // Populate local cache from server when relevant months load.
+    // This allows out-of-month dates (grey cells) to still display their plans.
+    const items = [
+      ...(prevMonthQuery.data?.items ?? []),
+      ...(monthQuery.data?.items ?? []),
+      ...(nextMonthQuery.data?.items ?? [])
+    ];
+
     const next: PlanMap = {};
     for (const it of items) {
       next[it.date] = {
@@ -90,18 +130,10 @@ export function TravelPlannerPage() {
       };
     }
     setPlans(next);
-    // Only depends on data; viewMonth changes are reflected by query key.
-  }, [monthQuery.data]);
-
-  useEffect(() => {
-    return () => {
-      // Clear debounced timers on unmount
-      for (const k of Object.keys(saveTimersRef.current)) {
-        window.clearTimeout(saveTimersRef.current[k]);
-      }
-      saveTimersRef.current = {};
-    };
-  }, []);
+    setEditingDateKey(null);
+    setEditingDraft(null);
+    // Only depends on data; viewMonth changes are reflected by query keys.
+  }, [monthQuery.data, nextMonthQuery.data, prevMonthQuery.data]);
 
   const yearOptions = useMemo(() => {
     const now = dayjs().year();
@@ -114,42 +146,47 @@ export function TravelPlannerPage() {
     return options;
   }, []);
 
-  const { leading, daysInMonth, cells } = useMemo(() => buildMonthCells(viewMonth), [viewMonth]);
-
   const title = `${year}年${monthIndex + 1}月`;
 
   const weekHeaders = ['一', '二', '三', '四', '五', '六', '日'];
 
-  const scheduleSave = (dateKey: string, nextPlan: DayPlan) => {
-    const isRestDay = !!nextPlan.isRestDay;
-    const am = isRestDay ? null : (nextPlan.am ?? '').trim() || null;
-    const pm = isRestDay ? null : (nextPlan.pm ?? '').trim() || null;
-
-    const existingTimer = saveTimersRef.current[dateKey];
-    if (existingTimer) window.clearTimeout(existingTimer);
-
-    saveTimersRef.current[dateKey] = window.setTimeout(() => {
-      upsertMutation.mutate({ date: dateKey, is_rest_day: isRestDay, am, pm });
-      delete saveTimersRef.current[dateKey];
-    }, 500);
+  const startEditing = (dateKey: string) => {
+    const current = plans[dateKey] ?? {};
+    if (current.isRestDay) return;
+    setEditingDateKey(dateKey);
+    setEditingDraft({ am: current.am ?? '', pm: current.pm ?? '' });
   };
 
-  const flushSave = (dateKey: string) => {
-    const pending = saveTimersRef.current[dateKey];
-    if (pending) {
-      window.clearTimeout(pending);
-      delete saveTimersRef.current[dateKey];
-    }
+  const cancelEditing = () => {
+    setEditingDateKey(null);
+    setEditingDraft(null);
+  };
 
-    const plan = plans[dateKey] ?? {};
-    const isRestDay = !!plan.isRestDay;
-    const am = isRestDay ? null : (plan.am ?? '').trim() || null;
-    const pm = isRestDay ? null : (plan.pm ?? '').trim() || null;
-    upsertMutation.mutate({ date: dateKey, is_rest_day: isRestDay, am, pm });
+  const commitEditing = () => {
+    if (!editingDateKey || !editingDraft) return;
+    const dateKey = editingDateKey;
+
+    const nextPlan: DayPlan = {
+      ...(plans[dateKey] ?? {}),
+      isRestDay: false,
+      am: editingDraft.am,
+      pm: editingDraft.pm
+    };
+
+    setPlans((prev) => ({
+      ...prev,
+      [dateKey]: nextPlan
+    }));
+
+    const am = (nextPlan.am ?? '').trim() || null;
+    const pm = (nextPlan.pm ?? '').trim() || null;
+    upsertMutation.mutate({ date: dateKey, is_rest_day: false, am, pm });
+
+    cancelEditing();
   };
 
   const toggleRestDay = (dateKey: string) => {
-    setEditingDateKey(null);
+    cancelEditing();
 
     const current = plans[dateKey] ?? {};
     const nextIsRestDay = !current.isRestDay;
@@ -162,13 +199,6 @@ export function TravelPlannerPage() {
       [dateKey]: nextPlan
     }));
 
-    // Persist immediately (not debounced) to keep the right-click action predictable.
-    const pending = saveTimersRef.current[dateKey];
-    if (pending) {
-      window.clearTimeout(pending);
-      delete saveTimersRef.current[dateKey];
-    }
-
     const am = nextIsRestDay ? null : (nextPlan.am ?? '').trim() || null;
     const pm = nextIsRestDay ? null : (nextPlan.pm ?? '').trim() || null;
     upsertMutation.mutate({ date: dateKey, is_rest_day: nextIsRestDay, am, pm });
@@ -178,7 +208,7 @@ export function TravelPlannerPage() {
 
   const handleOneClickArrange = async () => {
     if (isArranging) return;
-    setEditingDateKey(null);
+    cancelEditing();
     setIsArranging(true);
 
     try {
@@ -209,14 +239,14 @@ export function TravelPlannerPage() {
 
         if (dow === 1) {
           // Monday
-          nextAm = '上班';
-          nextPm = '回家';
+          nextAm = '上班 6:51';
+          nextPm = '回家 19:15';
         } else if (dow === 2) {
           // Tuesday
-          nextAm = '上班';
+          nextAm = '上班 8:01';
         } else if (dow === 5) {
           // Friday
-          nextPm = '回家';
+          nextPm = '回家 19:21';
         }
 
         if (nextAm || nextPm) {
@@ -225,15 +255,6 @@ export function TravelPlannerPage() {
       }
 
       if (!changed.length) return;
-
-      // Cancel pending debounced saves for affected dates.
-      for (const it of changed) {
-        const pending = saveTimersRef.current[it.dateKey];
-        if (pending) {
-          window.clearTimeout(pending);
-          delete saveTimersRef.current[it.dateKey];
-        }
-      }
 
       // Update local state immediately.
       setPlans((prev) => {
@@ -262,7 +283,7 @@ export function TravelPlannerPage() {
 
   const handleClearArrange = async () => {
     if (isClearing) return;
-    setEditingDateKey(null);
+    cancelEditing();
     setIsClearing(true);
 
     try {
@@ -281,14 +302,6 @@ export function TravelPlannerPage() {
       }
 
       if (!toDelete.length) return;
-
-      for (const dateKey of toDelete) {
-        const pending = saveTimersRef.current[dateKey];
-        if (pending) {
-          window.clearTimeout(pending);
-          delete saveTimersRef.current[dateKey];
-        }
-      }
 
       setPlans((prev) => {
         const next = { ...prev };
@@ -330,18 +343,18 @@ export function TravelPlannerPage() {
             icon={<LeftOutlined />}
             onClick={() => {
               setViewMonth((m) => m.subtract(1, 'month').startOf('month'));
-              setEditingDateKey(null);
+              cancelEditing();
             }}
           />
 
-          <Typography.Text strong>{title}</Typography.Text>
+          <Typography.Text strong className="travelPlanner__title">{title}</Typography.Text>
 
           <Button
             aria-label="下一月"
             icon={<RightOutlined />}
             onClick={() => {
               setViewMonth((m) => m.add(1, 'month').startOf('month'));
-              setEditingDateKey(null);
+              cancelEditing();
             }}
           />
 
@@ -351,7 +364,7 @@ export function TravelPlannerPage() {
             options={yearOptions}
             onChange={(nextYear) => {
               setViewMonth((m) => m.year(nextYear).startOf('month'));
-              setEditingDateKey(null);
+              cancelEditing();
             }}
           />
         </Space>
@@ -369,28 +382,32 @@ export function TravelPlannerPage() {
         <div className="travelPlanner__dates">
           <div className="travelPlanner__datesGrid">
             {Array.from({ length: cells }).map((_, i) => {
-              const dayNumber = i - leading + 1;
-              const inMonth = dayNumber >= 1 && dayNumber <= daysInMonth;
+              const date = calendarStart.add(i, 'day');
+              const inMonth = date.month() === viewMonth.month() && date.year() === viewMonth.year();
 
-              if (!inMonth) {
-                return <div key={i} className="travelPlanner__cell travelPlanner__cell--empty" />;
-              }
-
-              const date = viewMonth.date(dayNumber);
               const dateKey = date.format('YYYY-MM-DD');
               const plan = plans[dateKey] ?? {};
               const isEditing = editingDateKey === dateKey;
               const isRestDay = !!plan.isRestDay;
+              const isDisabled = !inMonth;
+              const cellWeekIndex = Math.floor(i / 7);
+              const isCurrentWeek = currentWeekIndex >= 0 && cellWeekIndex === currentWeekIndex;
 
-              return (
+              const dayNumber = date.date();
+
+              const cell = (
                 <div
                   key={dateKey}
-                  className={`travelPlanner__cell${isRestDay ? ' travelPlanner__cell--rest' : ''}`}
+                  className={`travelPlanner__cell${isRestDay ? ' travelPlanner__cell--rest' : ''}${
+                    isDisabled ? ' travelPlanner__cell--outMonth' : ''
+                  }${isCurrentWeek ? ' travelPlanner__cell--currentWeek' : ''}`}
                   onDoubleClick={() => {
-                    if (!isRestDay) setEditingDateKey(dateKey);
+                    if (isDisabled) return;
+                    startEditing(dateKey);
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    if (isDisabled) return;
                     toggleRestDay(dateKey);
                   }}
                 >
@@ -403,56 +420,46 @@ export function TravelPlannerPage() {
                     ) : null}
                   </div>
 
-                  {isEditing ? (
+                  {isEditing && !isDisabled ? (
                     <div className="travelPlanner__editor">
                       <Input
-                        value={plan.am ?? ''}
+                        value={editingDraft?.am ?? ''}
                         placeholder="上午"
                         disabled={isRestDay}
                         onChange={(e) => {
                           const value = e.target.value;
-                          setPlans((prev) => ({
-                            ...prev,
-                            [dateKey]: {
-                              ...prev[dateKey],
-                              am: value
-                            }
-                          }));
-                          scheduleSave(dateKey, { ...plan, am: value, isRestDay });
+                          setEditingDraft((prev) => ({ am: value, pm: prev?.pm ?? '' }));
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Escape' || e.key === 'Enter') {
+                          if (e.key === 'Escape') {
                             e.preventDefault();
-                            flushSave(dateKey);
-                            setEditingDateKey(null);
+                            cancelEditing();
+                          }
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitEditing();
                           }
                         }}
-                        onBlur={() => flushSave(dateKey)}
                       />
 
                       <Input
-                        value={plan.pm ?? ''}
+                        value={editingDraft?.pm ?? ''}
                         placeholder="下午"
                         disabled={isRestDay}
                         onChange={(e) => {
                           const value = e.target.value;
-                          setPlans((prev) => ({
-                            ...prev,
-                            [dateKey]: {
-                              ...prev[dateKey],
-                              pm: value
-                            }
-                          }));
-                          scheduleSave(dateKey, { ...plan, pm: value, isRestDay });
+                          setEditingDraft((prev) => ({ am: prev?.am ?? '', pm: value }));
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Escape' || e.key === 'Enter') {
+                          if (e.key === 'Escape') {
                             e.preventDefault();
-                            flushSave(dateKey);
-                            setEditingDateKey(null);
+                            cancelEditing();
+                          }
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitEditing();
                           }
                         }}
-                        onBlur={() => flushSave(dateKey)}
                       />
                     </div>
                   ) : (
@@ -481,6 +488,18 @@ export function TravelPlannerPage() {
                   )}
                 </div>
               );
+
+              // Show ribbon only on Mondays of the current week and place it on the right.
+              const isMonday = date.day() === 1;
+              if (isCurrentWeek && isMonday) {
+                return (
+                  <Badge.Ribbon text="本周" key={dateKey} placement="end">
+                    {cell}
+                  </Badge.Ribbon>
+                );
+              }
+
+              return cell;
             })}
           </div>
         </div>

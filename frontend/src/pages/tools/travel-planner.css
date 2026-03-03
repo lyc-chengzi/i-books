@@ -49,12 +49,18 @@
   font-size: 12px;
 }
 
+.travelPlanner__title {
+  font-size: 18px;
+  line-height: 1;
+}
+
 .travelPlanner__cell {
   border: 1px solid var(--app-divider);
   border-radius: var(--app-radius-md);
   padding: 10px;
-  min-height: 128px;
+  min-height: 96px;
   background: var(--app-glass-bg);
+  position: relative;
   user-select: none;
 }
 
@@ -62,6 +68,26 @@
   background: var(--app-glass-bg);
   background: color-mix(in srgb, var(--app-accent) 12%, var(--app-glass-bg));
   border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-divider));
+}
+
+.travelPlanner__cell--outMonth {
+  cursor: not-allowed;
+}
+
+.travelPlanner__cell--outMonth::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--app-divider) 55%, transparent);
+  pointer-events: none;
+}
+
+.travelPlanner__cell--currentWeek {
+  border-color: color-mix(in srgb, var(--app-accent) 40%, var(--app-divider));
+  box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+  outline: 2px solid color-mix(in srgb, var(--app-accent) 6%, transparent);
+  transition: box-shadow 160ms ease, transform 160ms ease;
 }
 
 .travelPlanner__cell--empty {
