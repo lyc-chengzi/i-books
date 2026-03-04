@@ -39,6 +39,8 @@ export function TravelPlannerPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
 
+  const todayKey = dayjs().format('YYYY-MM-DD');
+
   const [viewMonth, setViewMonth] = useState(() => dayjs().startOf('month'));
   const [editingDateKey, setEditingDateKey] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<{ am: string; pm: string } | null>(null);
@@ -386,6 +388,7 @@ export function TravelPlannerPage() {
               const inMonth = date.month() === viewMonth.month() && date.year() === viewMonth.year();
 
               const dateKey = date.format('YYYY-MM-DD');
+              const isToday = dateKey === todayKey;
               const plan = plans[dateKey] ?? {};
               const isEditing = editingDateKey === dateKey;
               const isRestDay = !!plan.isRestDay;
@@ -399,6 +402,8 @@ export function TravelPlannerPage() {
                 <div
                   key={dateKey}
                   className={`travelPlanner__cell${isRestDay ? ' travelPlanner__cell--rest' : ''}${
+                    isToday ? ' travelPlanner__cell--today' : ''
+                  }${
                     isDisabled ? ' travelPlanner__cell--outMonth' : ''
                   }${isCurrentWeek ? ' travelPlanner__cell--currentWeek' : ''}`}
                   onDoubleClick={() => {
@@ -413,11 +418,16 @@ export function TravelPlannerPage() {
                 >
                   <div className="travelPlanner__cellTop">
                     <Typography.Text strong>{dayNumber}</Typography.Text>
-                    {isRestDay ? (
-                      <Typography.Text type="secondary" className="travelPlanner__restLabel">
-                        休息日
-                      </Typography.Text>
-                    ) : null}
+                    <div className="travelPlanner__cellBadges">
+                      {isToday ? (
+                        <Typography.Text className="travelPlanner__todayLabel">今日</Typography.Text>
+                      ) : null}
+                      {isRestDay ? (
+                        <Typography.Text type="secondary" className="travelPlanner__restLabel">
+                          休息日
+                        </Typography.Text>
+                      ) : null}
+                    </div>
                   </div>
 
                   {isEditing && !isDisabled ? (

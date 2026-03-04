@@ -374,7 +374,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
           flex: 1
         }
       }}
-      style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+      style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
         <Space wrap size={8} style={{ width: '100%', flex: 'none', marginBottom: 8 }}>
@@ -500,7 +500,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '发生时间',
               dataIndex: 'occurredAt',
-              width: 220,
+              width: 200,
               fixed: 'left',
               render: (_v: unknown, record: TableRow) => {
                 if (isGroupRow(record)) {
@@ -527,7 +527,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             },
             {
               title: '项目',
-              width: 300,
+              width: 130,
               fixed: 'left',
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
@@ -542,8 +542,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                 const prefix = parts.slice(0, parts.length - 1).join('/');
                 return (
                   <span>
-                    <span>{prefix}/</span>
-                    <span className="tx-category-leaf">{leaf}</span>
+                    <Tooltip title={`${prefix}/${leaf}`}><span className="tx-category-leaf">{leaf}</span></Tooltip>
                   </span>
                 );
               }
@@ -551,7 +550,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '金额',
               dataIndex: 'amountCents',
-              width: 230,
+              width: 200,
               fixed: 'left',
               render: (_v: unknown, row: TableRow) => {
                 if (isGroupRow(row)) {
@@ -647,7 +646,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             },
             {
               title: '操作',
-              width: 150,
+              width: 120,
               fixed: 'right',
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return null;

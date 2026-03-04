@@ -90,6 +90,16 @@
   transition: box-shadow 160ms ease, transform 160ms ease;
 }
 
+.travelPlanner__cell--today {
+  z-index: 1;
+  transform: scale(1.3);
+  border-color: color-mix(in srgb, var(--ant-colorPrimary, var(--app-accent)) 55%, var(--app-divider));
+  outline: 2px solid color-mix(in srgb, var(--ant-colorPrimary, var(--app-accent)) 10%, transparent);
+  background: color-mix(in srgb, var(--ant-colorPrimary, var(--app-accent)) 8%, var(--app-glass-bg));
+  box-shadow: var(--app-shadow-sm);
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
 .travelPlanner__cell--empty {
   border: 1px dashed var(--app-divider);
   background: transparent;
@@ -100,6 +110,18 @@
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 8px;
+}
+
+.travelPlanner__cellBadges {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.travelPlanner__todayLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-colorPrimary, var(--app-accent));
 }
 
 .travelPlanner__restLabel {
