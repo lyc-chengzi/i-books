@@ -213,6 +213,7 @@ Cookie 模式（用于本地部署体验）：
 ### 7.3 ledger
 
 - `GET /api/ledger/transactions`：流水列表（服务端分页），并返回顶部汇总 `incomeCents/expenseCents`
+  - 可选排序参数：`sortBy=occurredAt`、`sortOrder=asc|desc`
 - `POST /api/ledger/transactions`：新增收入/支出
 - `PATCH /api/ledger/transactions/{id}`：编辑（不支持 transfer/refund）
 - `DELETE /api/ledger/transactions/{id}`：删除

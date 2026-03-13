@@ -35,6 +35,21 @@ function buildMonthCells(month: dayjs.Dayjs) {
   };
 }
 
+function getSuggestedPlan(date: dayjs.Dayjs): Pick<DayPlan, 'am' | 'pm'> {
+  switch (date.day()) {
+    case 1:
+      return { am: '上班 6:39', pm: '回家 19:15' };
+    case 2:
+      return { am: '上班 8:01' };
+    case 4:
+      return { pm: '回家 19:15' };
+    case 5:
+      return { am: '上班 6:39', pm: '回家 19:21' };
+    default:
+      return {};
+  }
+}
+
 export function TravelPlannerPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -208,6 +223,20 @@ export function TravelPlannerPage() {
 
   const isBlank = (v: string | undefined) => !(v ?? '').trim();
 
+  const fillSuggestedDraft = (dateKey: string, slot: 'am' | 'pm') => {
+    const currentValue = editingDraft?.[slot] ?? '';
+    if (currentValue.trim()) return false;
+
+    const suggestedValue = getSuggestedPlan(dayjs(dateKey))[slot];
+    if (!suggestedValue) return false;
+
+    setEditingDraft((prev) => ({
+      am: slot === 'am' ? suggestedValue : prev?.am ?? '',
+      pm: slot === 'pm' ? suggestedValue : prev?.pm ?? ''
+    }));
+    return true;
+  };
+
   const handleOneClickArrange = async () => {
     if (isArranging) return;
     cancelEditing();
@@ -236,20 +265,7 @@ export function TravelPlannerPage() {
         // Rule 2: for days with no plans and not rest day
         if (isRestDay || !isEmptyPlan) continue;
 
-        let nextAm: string | undefined;
-        let nextPm: string | undefined;
-
-        if (dow === 1) {
-          // Monday
-          nextAm = '上班 6:51';
-          nextPm = '回家 19:15';
-        } else if (dow === 2) {
-          // Tuesday
-          nextAm = '上班 8:01';
-        } else if (dow === 5) {
-          // Friday
-          nextPm = '回家 19:21';
-        }
+        const { am: nextAm, pm: nextPm } = getSuggestedPlan(date);
 
         if (nextAm || nextPm) {
           changed.push({ dateKey, next: { ...current, isRestDay: false, am: nextAm, pm: nextPm } });
@@ -290,7 +306,7 @@ export function TravelPlannerPage() {
 
     try {
       const days = viewMonth.daysInMonth();
-      const toDelete: string[] = [];
+      const changed: Array<{ dateKey: string; next: DayPlan | null }> = [];
 
       for (let dayNumber = 1; dayNumber <= days; dayNumber++) {
         const date = viewMonth.date(dayNumber);
@@ -300,21 +316,37 @@ export function TravelPlannerPage() {
 
         const hasAnyPlan = !isBlank(current.am) || !isBlank(current.pm);
         const isRestDay = !!current.isRestDay;
-        if (hasAnyPlan || isRestDay) toDelete.push(dateKey);
+
+        if (isRestDay) {
+          if (hasAnyPlan) {
+            changed.push({ dateKey, next: { isRestDay: true, am: undefined, pm: undefined } });
+          }
+          continue;
+        }
+
+        if (hasAnyPlan) {
+          changed.push({ dateKey, next: null });
+        }
       }
 
-      if (!toDelete.length) return;
+      if (!changed.length) return;
 
       setPlans((prev) => {
         const next = { ...prev };
-        for (const k of toDelete) delete next[k];
+        for (const item of changed) {
+          if (item.next) next[item.dateKey] = item.next;
+          else delete next[item.dateKey];
+        }
         return next;
       });
 
-      for (const dateKey of toDelete) {
+      for (const item of changed) {
+        const is_rest_day = !!item.next?.isRestDay;
+        const am = is_rest_day ? null : null;
+        const pm = is_rest_day ? null : null;
         await api.put(
           '/tools/travel-plans',
-          { date: dateKey, is_rest_day: false, am: null, pm: null },
+          { date: item.dateKey, is_rest_day, am, pm },
           { token: auth.token }
         );
       }
@@ -441,6 +473,13 @@ export function TravelPlannerPage() {
                           setEditingDraft((prev) => ({ am: value, pm: prev?.pm ?? '' }));
                         }}
                         onKeyDown={(e) => {
+                          if (e.key === 'Tab') {
+                            const filled = fillSuggestedDraft(dateKey, 'am');
+                            if (filled) {
+                              e.preventDefault();
+                              return;
+                            }
+                          }
                           if (e.key === 'Escape') {
                             e.preventDefault();
                             cancelEditing();
@@ -461,6 +500,13 @@ export function TravelPlannerPage() {
                           setEditingDraft((prev) => ({ am: prev?.am ?? '', pm: value }));
                         }}
                         onKeyDown={(e) => {
+                          if (e.key === 'Tab') {
+                            const filled = fillSuggestedDraft(dateKey, 'pm');
+                            if (filled) {
+                              e.preventDefault();
+                              return;
+                            }
+                          }
                           if (e.key === 'Escape') {
                             e.preventDefault();
                             cancelEditing();
@@ -516,7 +562,7 @@ export function TravelPlannerPage() {
       </div>
 
       <Typography.Text type="secondary" className="travelPlanner__hint">
-        双击某一天，填写上午/下午行程（按 ESC 退出编辑）；右键切换休息日
+        双击某一天，填写上午/下午行程（Tab 可按模板自动补全，ESC 退出编辑）；右键切换休息日
       </Typography.Text>
     </div>
   );

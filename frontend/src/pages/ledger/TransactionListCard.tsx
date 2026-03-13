@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, EditOutlined, ReloadOutlined, RollbackOutlined } from '@ant-design/icons';
-import { App as AntdApp, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Pagination, Radio, Select, Space, Switch, Table, Tag, Tooltip, Typography, version } from 'antd';
+import { App as AntdApp, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Pagination, Radio, Select, Space, Switch, Table, Tag, Tooltip, Typography, type TableProps } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useRef, useState, type Key } from 'react';
 
@@ -54,6 +54,7 @@ type CategoryTagDto = {
 type TypeFilter = 'all' | TransactionRow['type'];
 type SourceFilter = 'all' | TransactionRow['fundingSource'];
 type BankAccountFilter = 'all' | number;
+type OccurredAtSort = 'asc' | 'desc';
 
 type UiFlashRow = { id: number; at: number } | null;
 
@@ -80,11 +81,12 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
 
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('expense');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [bankAccountFilter, setBankAccountFilter] = useState<BankAccountFilter>('all');
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([dayjs().startOf('month'), dayjs().endOf('month')]);
   const [keyword, setKeyword] = useState('');
+  const [occurredAtSort, setOccurredAtSort] = useState<OccurredAtSort>('asc');
 
   const [groupByDate, setGroupByDate] = useState(true);
 
@@ -115,6 +117,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
         start: dateRange?.[0]?.toISOString() ?? null,
         end: dateRange?.[1]?.toISOString() ?? null,
         keyword,
+        occurredAtSort,
         page,
         pageSize
       }
@@ -128,6 +131,8 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
       if (start) params.set('start', start.startOf('day').toISOString());
       if (end) params.set('end', end.endOf('day').toISOString());
       if (keyword.trim()) params.set('keyword', keyword.trim());
+      params.set('sortBy', 'occurredAt');
+      params.set('sortOrder', occurredAtSort);
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
       return api.get<TransactionListOut>(`/ledger/transactions?${params.toString()}`, { token: auth.token });
@@ -303,7 +308,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   // When filters change and results shrink, go back to first page
   useEffect(() => {
     setPage(1);
-  }, [typeFilter, sourceFilter, bankAccountFilter, dateRange, keyword]);
+  }, [typeFilter, sourceFilter, bankAccountFilter, dateRange, keyword, occurredAtSort]);
 
   useEffect(() => {
     const flashId = flashQuery.data?.id ?? null;
@@ -341,6 +346,23 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   const tableData = useMemo((): TableRow[] => {
     return groupByDate ? (groupedPaged as TableRow[]) : (paged as TableRow[]);
   }, [groupByDate, groupedPaged, paged]);
+
+  const handleTableChange: TableProps<TableRow>['onChange'] = (_pagination, _filters, sorter) => {
+    const nextSorter = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (!nextSorter || nextSorter.columnKey !== 'occurredAt') return;
+
+    if (nextSorter.order === 'descend') {
+      setOccurredAtSort('desc');
+      return;
+    }
+
+    if (nextSorter.order === 'ascend') {
+      setOccurredAtSort('asc');
+      return;
+    }
+
+    setOccurredAtSort((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  };
 
   return (
     <Card
@@ -443,11 +465,12 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
           />
           <Button
             onClick={() => {
-              setTypeFilter('all');
+              setTypeFilter('expense');
               setSourceFilter('all');
               setBankAccountFilter('all');
               setDateRange([dayjs().startOf('month'), dayjs().endOf('month')]);
               setKeyword('');
+              setOccurredAtSort('asc');
             }}
           >
             重置
@@ -496,12 +519,17 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                 setSelectedRowId(record.id);
               }
             })}
+            onChange={handleTableChange}
             columns={[
             {
               title: '发生时间',
+              key: 'occurredAt',
               dataIndex: 'occurredAt',
               width: 200,
               fixed: 'left',
+              sorter: true,
+              sortDirections: ['descend', 'ascend', 'descend'],
+              sortOrder: occurredAtSort === 'asc' ? 'ascend' : 'descend',
               render: (_v: unknown, record: TableRow) => {
                 if (isGroupRow(record)) {
                   return (

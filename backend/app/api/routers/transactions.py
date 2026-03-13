@@ -119,6 +119,8 @@ def list_transactions(
     start: datetime | None = None,
     end: datetime | None = None,
     keyword: str | None = None,
+    sortBy: str | None = None,
+    sortOrder: str = "asc",
     page: int = 1,
     pageSize: int = 50,
     db: Session = Depends(get_db),
@@ -128,10 +130,17 @@ def list_transactions(
         raise HTTPException(status_code=400, detail="Invalid type")
     if fundingSource not in ("all", "cash", "bank"):
         raise HTTPException(status_code=400, detail="Invalid fundingSource")
+    if sortBy not in (None, "occurredAt"):
+        raise HTTPException(status_code=400, detail="Invalid sortBy")
+    if sortOrder not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail="Invalid sortOrder")
     if page < 1:
         raise HTTPException(status_code=400, detail="Invalid page")
     if pageSize < 1 or pageSize > 200:
         raise HTTPException(status_code=400, detail="Invalid pageSize")
+
+    occurred_order = Transaction.occurred_at.asc() if sortOrder == "asc" else Transaction.occurred_at.desc()
+    id_order = Transaction.id.asc() if sortOrder == "asc" else Transaction.id.desc()
 
     filters = [Transaction.user_id == current_user.id]
     common_filters = [Transaction.user_id == current_user.id]
@@ -236,7 +245,7 @@ def list_transactions(
         expense_cents = 0
 
     rows = db.scalars(
-        base.order_by(Transaction.occurred_at.asc(), Transaction.id.asc())
+        base.order_by(occurred_order, id_order)
         .offset((page - 1) * pageSize)
         .limit(pageSize)
     ).all()
@@ -271,7 +280,7 @@ def list_transactions(
                 Transaction.type == "refund",
                 Transaction.refund_of_transaction_id.in_(refundable_ids),
             )
-            .order_by(Transaction.occurred_at.asc(), Transaction.id.asc())
+            .order_by(occurred_order, id_order)
         ).all()
         refund_items = [
             TransactionOut(

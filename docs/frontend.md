@@ -35,11 +35,12 @@
 
 流水列表能力（当前实现为一个大卡片组件）：
 - 查询与过滤：
-  - 类型：全部/支出/收入/转账/退款
+  - 类型：默认选中“支出”，可切换为 全部/支出/收入/转账/退款
   - 资金来源：全部/现金/银行卡(含信用卡)
   - 银行账户：全部 或 指定账户
   - 日期范围：默认本月（支持快捷：今年/去年/本月/上月/本周等）
   - 关键词：按关键字搜索（后端支持的字段由后端决定）
+- 排序：支持点击“发生时间”表头切换升序/降序（服务端排序）
 - 分组展示：支持「按日期分组」展开/折叠
 - 分页：服务端分页（page/pageSize）
 - 编辑：支持对非转账、非退款行进行编辑（主要是时间/分类/标签）
@@ -47,6 +48,16 @@
 - 退款：
   - 仅支持“银行卡支出”发起退款（支持全额/部分退款）
   - 退款会生成退款流水，并在原支出下作为子行展示
+
+### 1.5 工具（Tools）
+入口：顶部导航「工具」。
+
+已实现页面：
+- 行程规划：`/tools/travel-planner`
+  - 月历方式查看与编辑每天的上午/下午安排
+  - 双击日期进入编辑，右键切换休息日
+  - 一键安排会默认把周末标记为休息日，并按工作日模板填入通勤安排
+  - 编辑输入框支持按 `Tab` 按当前日期与时段自动补全建议内容
 
 #### 1.2.1 支出口径（含退款）
 
@@ -128,11 +139,14 @@
   - `/config/categories`
   - `/config/users`（管理员）
   - `/config/transaction-audit-logs`（管理员）
+- `/tools/*`：ToolsLayout（工具页）
+  - `/tools/travel-planner`
 
 布局说明：
 - RootLayout：顶部主导航（记账/统计/配置）+ 用户菜单（退出登录）+ Drawer 侧边导航（移动端/窄屏）
 - SectionLayout：为 stats/config 提供统一的二级横向菜单 + Outlet 内容区
 - LedgerLayout：左侧常驻流水列表，右侧是“新增支出/新增收入/转账还款”的二级导航与表单区域，支持收起/展开右侧面板
+- ToolsLayout：工具模块的二级导航，目前承载行程规划入口
 
 ---
 
@@ -189,6 +203,8 @@
     - TransactionCreateExpensePage.tsx / TransactionCreateIncomePage.tsx：新增支出/收入
     - TransferCreatePage.tsx：转账/还款
     - TransactionListCard.tsx：流水列表（过滤、分组、编辑、删除、退款等）
+  - tools/：工具页
+    - TravelPlannerPage.tsx：月历行程规划（休息日切换、一键安排、快捷补全）
   - stats/：统计页面与工具
     - YearCategoryStatsPage.tsx：年度统计（饼图 + 折线 + 钻取）
     - YoYStatsPage.tsx：同比
