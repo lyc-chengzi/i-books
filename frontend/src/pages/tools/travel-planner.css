@@ -11,8 +11,19 @@
 
 .travelPlanner__header {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+
+.travelPlanner__toolbar {
+  flex: 1;
+  min-width: 0;
+}
+
+.travelPlanner__commuteCount {
+  white-space: nowrap;
+  color: var(--app-text-secondary);
 }
 
 .travelPlanner__calendar {

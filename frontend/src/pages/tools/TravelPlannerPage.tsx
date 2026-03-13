@@ -50,6 +50,10 @@ function getSuggestedPlan(date: dayjs.Dayjs): Pick<DayPlan, 'am' | 'pm'> {
   }
 }
 
+function getTabSuggestedValue(slot: 'am' | 'pm') {
+  return slot === 'am' ? '上班 6:39' : '回家 19:15';
+}
+
 export function TravelPlannerPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -165,6 +169,22 @@ export function TravelPlannerPage() {
 
   const title = `${year}年${monthIndex + 1}月`;
 
+  const commuteCount = useMemo(() => {
+    let count = 0;
+    const days = viewMonth.daysInMonth();
+
+    for (let dayNumber = 1; dayNumber <= days; dayNumber++) {
+      const dateKey = viewMonth.date(dayNumber).format('YYYY-MM-DD');
+      const plan = plans[dateKey];
+      if (!plan) continue;
+
+      if ((plan.am ?? '').trim()) count += 1;
+      if ((plan.pm ?? '').trim()) count += 1;
+    }
+
+    return count;
+  }, [plans, viewMonth]);
+
   const weekHeaders = ['一', '二', '三', '四', '五', '六', '日'];
 
   const startEditing = (dateKey: string) => {
@@ -223,11 +243,11 @@ export function TravelPlannerPage() {
 
   const isBlank = (v: string | undefined) => !(v ?? '').trim();
 
-  const fillSuggestedDraft = (dateKey: string, slot: 'am' | 'pm') => {
+  const fillSuggestedDraft = (slot: 'am' | 'pm') => {
     const currentValue = editingDraft?.[slot] ?? '';
     if (currentValue.trim()) return false;
 
-    const suggestedValue = getSuggestedPlan(dayjs(dateKey))[slot];
+    const suggestedValue = getTabSuggestedValue(slot);
     if (!suggestedValue) return false;
 
     setEditingDraft((prev) => ({
@@ -363,7 +383,7 @@ export function TravelPlannerPage() {
   return (
     <div className="travelPlanner">
       <div className="travelPlanner__header">
-        <Space size={10} wrap>
+        <Space size={10} wrap className="travelPlanner__toolbar">
           <Button type="primary" loading={isArranging} onClick={handleOneClickArrange}>
             一键安排
           </Button>
@@ -402,6 +422,10 @@ export function TravelPlannerPage() {
             }}
           />
         </Space>
+
+        <Typography.Text strong className="travelPlanner__commuteCount">
+          通勤次数：{commuteCount}次
+        </Typography.Text>
       </div>
 
       <div className="travelPlanner__calendar">
@@ -474,7 +498,7 @@ export function TravelPlannerPage() {
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Tab') {
-                            const filled = fillSuggestedDraft(dateKey, 'am');
+                            const filled = fillSuggestedDraft('am');
                             if (filled) {
                               e.preventDefault();
                               return;
@@ -501,7 +525,7 @@ export function TravelPlannerPage() {
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Tab') {
-                            const filled = fillSuggestedDraft(dateKey, 'pm');
+                            const filled = fillSuggestedDraft('pm');
                             if (filled) {
                               e.preventDefault();
                               return;
