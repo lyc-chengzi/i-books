@@ -15,12 +15,13 @@ import {
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import type { CSSProperties } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { CategoryLeafSelect } from '../../components/CategoryLeafSelect';
 import { FloatingFormActions } from '../../components/FloatingFormActions';
 import { useAuth } from '../../auth/useAuth';
 import { api, getApiErrorMessage } from '../../lib/api';
+import { LEDGER_COPY_DRAFT_QUERY_KEY, type LedgerCopyDraft } from './copyDraft';
 
 type BankAccount = {
   id: number;
@@ -118,6 +119,7 @@ export function TransactionCreateExpensePage() {
   const queryClient = useQueryClient();
 
   const [saving, setSaving] = useState(false);
+  const skipTagResetRef = useRef(false);
 
   const [form] = Form.useForm<FormValues>();
   const categoryId = Form.useWatch('categoryId', form);
@@ -134,9 +136,40 @@ export function TransactionCreateExpensePage() {
     queryFn: () => api.get<CategoryTagDto[]>(`/config/categories/${topLevelExpenseCategoryId}/tags`, { token: auth.token })
   });
 
+  const copyDraftQuery = useQuery({
+    queryKey: LEDGER_COPY_DRAFT_QUERY_KEY,
+    queryFn: async () => null as LedgerCopyDraft | null,
+    enabled: false,
+    initialData: null as LedgerCopyDraft | null,
+    staleTime: Infinity,
+    gcTime: Infinity
+  });
+
   useEffect(() => {
+    if (skipTagResetRef.current) {
+      skipTagResetRef.current = false;
+      return;
+    }
     form.setFieldValue('tagIds', []);
   }, [categoryId, form]);
+
+  useEffect(() => {
+    const draft = copyDraftQuery.data;
+    if (!draft || draft.target !== 'expense') return;
+
+    skipTagResetRef.current = true;
+    setTopLevelExpenseCategoryId(null);
+    form.setFieldsValue({
+      amount: draft.values.amount,
+      occurredAt: dayjs(draft.values.occurredAt),
+      categoryId: draft.values.categoryId,
+      fundingSource: draft.values.fundingSource,
+      bankAccountId: draft.values.bankAccountId ?? undefined,
+      tagIds: draft.values.tagIds,
+      note: draft.values.note ?? undefined
+    });
+    queryClient.setQueryData(LEDGER_COPY_DRAFT_QUERY_KEY, null);
+  }, [copyDraftQuery.data, form, queryClient]);
 
   return (
     <Card>

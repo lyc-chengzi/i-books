@@ -11,6 +11,10 @@
   background: rgba(43, 95, 166, 0.10) !important;
 }
 
+.tx-transactions-table .ant-table-tbody > tr.tx-row-copied > td {
+  background: rgba(201, 132, 31, 0.16) !important;
+}
+
 .tx-transactions-table .ant-table-tbody > tr.tx-row-selected > td {
   background: rgb(246, 226, 234) !important;
 }

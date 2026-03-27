@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, EditOutlined, ReloadOutlined, RollbackOutlined } from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, EditOutlined, ReloadOutlined, RollbackOutlined } from '@ant-design/icons';
 import { App as AntdApp, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Pagination, Radio, Select, Space, Switch, Table, Tag, Tooltip, Typography, type TableProps } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useRef, useState, type Key } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { CategoryLeafSelect, type CategoryNode, type CategoryType } from '../../components/CategoryLeafSelect';
 import { useAuth } from '../../auth/useAuth';
 import { api, getApiErrorMessage } from '../../lib/api';
+import { LEDGER_COPY_DRAFT_QUERY_KEY, type LedgerCopyDraft } from './copyDraft';
 
 type BankAccount = {
   id: number;
@@ -57,6 +59,7 @@ type BankAccountFilter = 'all' | number;
 type OccurredAtSort = 'asc' | 'desc';
 
 type UiFlashRow = { id: number; at: number } | null;
+type UiCopiedSourceRow = { id: number; at: number } | null;
 
 type GroupRow = {
   key: string;
@@ -78,6 +81,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   const auth = useAuth();
   const { message, modal } = AntdApp.useApp();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -95,6 +99,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
 
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [flashRowId, setFlashRowId] = useState<number | null>(null);
+  const [copiedSourceRowId, setCopiedSourceRowId] = useState<number | null>(null);
 
   const [expandedRowKeys, setExpandedRowKeys] = useState<Key[]>([]);
 
@@ -145,6 +150,15 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
     queryFn: async () => null as UiFlashRow,
     enabled: false,
     initialData: null as UiFlashRow,
+    staleTime: Infinity,
+    gcTime: Infinity
+  });
+
+  const copiedSourceRowQuery = useQuery({
+    queryKey: ['ui', 'ledger', 'copiedSourceRow'],
+    queryFn: async () => null as UiCopiedSourceRow,
+    enabled: false,
+    initialData: null as UiCopiedSourceRow,
     staleTime: Infinity,
     gcTime: Infinity
   });
@@ -322,6 +336,17 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   }, [flashQuery.data?.id, queryClient]);
 
   useEffect(() => {
+    const copiedId = copiedSourceRowQuery.data?.id ?? null;
+    if (!copiedId) return;
+    setCopiedSourceRowId(copiedId);
+    const timer = window.setTimeout(() => {
+      setCopiedSourceRowId(null);
+      queryClient.setQueryData(['ui', 'ledger', 'copiedSourceRow'], null);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [copiedSourceRowQuery.data?.id, queryClient]);
+
+  useEffect(() => {
     // With server-side paging, we don't auto-jump to the page containing the flash row.
     // Keep the highlight if the row is in the current page.
   }, []);
@@ -362,6 +387,76 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
     }
 
     setOccurredAtSort((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  };
+
+  const copyRowToDraft = (row: TransactionRow) => {
+    let draft: LedgerCopyDraft | null = null;
+    let targetPath = '';
+
+    if (row.type === 'expense') {
+      if (!row.categoryId) {
+        message.info('该支出记录缺少分类，无法复制');
+        return;
+      }
+      draft = {
+        target: 'expense',
+        copiedAt: Date.now(),
+        values: {
+          amount: row.amountCents / 100,
+          occurredAt: row.occurredAt,
+          categoryId: row.categoryId,
+          fundingSource: row.fundingSource,
+          bankAccountId: row.bankAccountId ?? null,
+          tagIds: row.tagIds ?? [],
+          note: row.note ?? null
+        }
+      };
+      targetPath = '/ledger/expense/new';
+    } else if (row.type === 'income') {
+      if (!row.categoryId) {
+        message.info('该收入记录缺少分类，无法复制');
+        return;
+      }
+      draft = {
+        target: 'income',
+        copiedAt: Date.now(),
+        values: {
+          amount: row.amountCents / 100,
+          occurredAt: row.occurredAt,
+          categoryId: row.categoryId,
+          fundingSource: row.fundingSource,
+          bankAccountId: row.bankAccountId ?? null,
+          note: row.note ?? null
+        }
+      };
+      targetPath = '/ledger/income/new';
+    } else if (row.type === 'transfer') {
+      if (!row.bankAccountId || !row.toBankAccountId) {
+        message.info('该转账记录缺少账户信息，无法复制');
+        return;
+      }
+      draft = {
+        target: 'transfer',
+        copiedAt: Date.now(),
+        values: {
+          amount: row.amountCents / 100,
+          occurredAt: row.occurredAt,
+          fromBankAccountId: row.bankAccountId,
+          toBankAccountId: row.toBankAccountId,
+          note: row.note ?? null
+        }
+      };
+      targetPath = '/ledger/transfers/new';
+    } else {
+      message.info('退款流水暂不支持复制');
+      return;
+    }
+
+    queryClient.setQueryData(LEDGER_COPY_DRAFT_QUERY_KEY, draft);
+    queryClient.setQueryData(['ui', 'ledger', 'copiedSourceRow'], { id: row.id, at: Date.now() });
+    setSelectedRowId(row.id);
+    void navigate(targetPath);
+    message.success('已复制到右侧表单');
   };
 
   return (
@@ -510,6 +605,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                 return classes.join(' ');
               }
               if (record.id === flashRowId) classes.push('tx-row-flash');
+              if (record.id === copiedSourceRowId) classes.push('tx-row-copied');
               if (record.id === selectedRowId) classes.push('tx-row-selected');
               return classes.join(' ');
             }}
@@ -674,7 +770,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             },
             {
               title: '操作',
-              width: 120,
+              width: 220,
               fixed: 'right',
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return null;
@@ -693,6 +789,19 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
                   : '仅支持银行卡支出退款';
                 return (
                   <Space size={0}>
+                    <Tooltip title="复制到右侧表单">
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<CopyOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyRowToDraft(row);
+                        }}
+                      >
+                        复制
+                      </Button>
+                    </Tooltip>
                     <Button
                       type="link"
                       size="small"

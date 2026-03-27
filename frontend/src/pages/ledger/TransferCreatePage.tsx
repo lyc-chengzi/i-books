@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntdApp, Card, DatePicker, Form, Input, InputNumber, Select } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
+import { useEffect } from 'react';
 
 import { useAuth } from '../../auth/useAuth';
 import { FloatingFormActions } from '../../components/FloatingFormActions';
 import { api, getApiErrorMessage } from '../../lib/api';
+import { LEDGER_COPY_DRAFT_QUERY_KEY, type LedgerCopyDraft } from './copyDraft';
 
 type BankAccount = {
   id: number;
@@ -36,6 +38,29 @@ export function TransferCreatePage() {
     queryKey: ['bankAccounts', 'usage'],
     queryFn: () => api.get<BankAccount[]>('/config/bank-accounts?orderBy=usage', { token: auth.token })
   });
+
+  const copyDraftQuery = useQuery({
+    queryKey: LEDGER_COPY_DRAFT_QUERY_KEY,
+    queryFn: async () => null as LedgerCopyDraft | null,
+    enabled: false,
+    initialData: null as LedgerCopyDraft | null,
+    staleTime: Infinity,
+    gcTime: Infinity
+  });
+
+  useEffect(() => {
+    const draft = copyDraftQuery.data;
+    if (!draft || draft.target !== 'transfer') return;
+
+    form.setFieldsValue({
+      amount: draft.values.amount,
+      occurredAt: dayjs(draft.values.occurredAt),
+      fromBankAccountId: draft.values.fromBankAccountId,
+      toBankAccountId: draft.values.toBankAccountId,
+      note: draft.values.note ?? undefined
+    });
+    queryClient.setQueryData(LEDGER_COPY_DRAFT_QUERY_KEY, null);
+  }, [copyDraftQuery.data, form, queryClient]);
 
   const createMutation = useMutation({
     mutationFn: (payload: any) => api.post('/ledger/transfers', payload, { token: auth.token }),
