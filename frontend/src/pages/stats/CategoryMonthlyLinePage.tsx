@@ -57,16 +57,24 @@ export function CategoryMonthlyLinePage() {
       series: [
         {
           name: '收入',
-          type: 'line',
-          smooth: true,
-          showSymbol: false,
+          type: 'bar',
+          barMaxWidth: 28,
           data: derived.incomeCents.map((c) => Number((c / 100).toFixed(2)))
         },
         {
-          name: '支出',
+          name: '支出（柱）',
+          type: 'bar',
+          barMaxWidth: 28,
+          data: derived.expenseCents.map((c) => Number((c / 100).toFixed(2)))
+        },
+        {
+          name: '支出（线）',
           type: 'line',
           smooth: true,
           showSymbol: false,
+          symbol: 'circle',
+          symbolSize: 6,
+          z: 3,
           data: derived.expenseCents.map((c) => Number((c / 100).toFixed(2)))
         }
       ]
@@ -77,7 +85,7 @@ export function CategoryMonthlyLinePage() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card
-        title="月度折线（范围内收入/支出）"
+        title="月度收支分析"
         extra={
           <Space size={12} align="center">
             <DatePicker

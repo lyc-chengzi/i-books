@@ -70,3 +70,12 @@ class YoYMonthlyStatsOut(BaseModel):
     currentLabel: str
     previousLabel: str
     series: list[YoYMonthlyPoint]
+
+
+class MoMStatsOut(BaseModel):
+    type: str = Field(pattern="^(income|expense)$")
+    currentLabel: str
+    previousLabel: str
+    currentTotalCents: int
+    previousTotalCents: int
+    items: list[MonthCategoryCompare]

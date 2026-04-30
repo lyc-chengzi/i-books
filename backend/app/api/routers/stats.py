@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import get_current_user, get_db
-from app.core.datetime_utils import to_utc_naive
 from app.models.category import Category
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -15,6 +15,7 @@ from app.schemas.stats import (
     ExpenseItemStatsOut,
     MonthCategoryCompare,
     MonthCategoryStatsOut,
+    MoMStatsOut,
     MonthlyInOut,
     MonthlyRangeOut,
     YearCategoryStatsOut,
@@ -65,15 +66,26 @@ def _merge_net(expense_rows: list[tuple], refund_rows: list[tuple]) -> dict[tupl
     return out
 
 
-def _year_bounds_utc_naive(year: int) -> tuple[datetime, datetime]:
+def _user_zone(current_user: User) -> tzinfo:
+    try:
+        return ZoneInfo(current_user.time_zone or "Asia/Shanghai")
+    except ZoneInfoNotFoundError:
+        return timezone(timedelta(hours=8))
+
+
+def _local_datetime_to_utc_naive(dt: datetime, user_zone: tzinfo) -> datetime:
+    return dt.replace(tzinfo=user_zone).astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _year_bounds_utc_naive(year: int, user_zone: tzinfo) -> tuple[datetime, datetime]:
     if year < 1970 or year > 2100:
         raise HTTPException(status_code=400, detail="Invalid year")
     start = datetime(year, 1, 1)
     end = datetime(year + 1, 1, 1)
-    return start, end
+    return _local_datetime_to_utc_naive(start, user_zone), _local_datetime_to_utc_naive(end, user_zone)
 
 
-def _month_bounds_utc_naive(year: int, month: int) -> tuple[datetime, datetime]:
+def _month_bounds_utc_naive(year: int, month: int, user_zone: tzinfo) -> tuple[datetime, datetime]:
     if year < 1970 or year > 2100:
         raise HTTPException(status_code=400, detail="Invalid year")
     if month < 1 or month > 12:
@@ -84,7 +96,120 @@ def _month_bounds_utc_naive(year: int, month: int) -> tuple[datetime, datetime]:
         end = datetime(year + 1, 1, 1)
     else:
         end = datetime(year, month + 1, 1)
-    return start, end
+    return _local_datetime_to_utc_naive(start, user_zone), _local_datetime_to_utc_naive(end, user_zone)
+
+
+def _next_month(year: int, month: int) -> tuple[int, int]:
+    if month == 12:
+        return year + 1, 1
+    return year, month + 1
+
+
+def _sum_type_period(
+    db: Session,
+    user_id: int,
+    type: str,
+    start: datetime,
+    end: datetime,
+) -> int:
+    if type == "income":
+        return int(
+            db.scalar(
+                select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
+                    Transaction.user_id == user_id,
+                    Transaction.type == "income",
+                    Transaction.occurred_at >= start,
+                    Transaction.occurred_at < end,
+                )
+            )
+            or 0
+        )
+
+    expense = aliased(Transaction)
+    refund = aliased(Transaction)
+    expense_sum = int(
+        db.scalar(
+            select(func.coalesce(func.sum(expense.amount_cents), 0)).where(
+                expense.user_id == user_id,
+                expense.type == "expense",
+                expense.occurred_at >= start,
+                expense.occurred_at < end,
+            )
+        )
+        or 0
+    )
+    refund_sum = int(
+        db.scalar(
+            select(func.coalesce(func.sum(refund.amount_cents), 0))
+            .select_from(refund)
+            .join(expense, refund.refund_of_transaction_id == expense.id)
+            .where(
+                refund.user_id == user_id,
+                refund.type == "refund",
+                expense.user_id == user_id,
+                expense.type == "expense",
+                expense.occurred_at >= start,
+                expense.occurred_at < end,
+            )
+        )
+        or 0
+    )
+    return max(0, expense_sum - refund_sum)
+
+
+def _category_rows_for_period(
+    db: Session,
+    user_id: int,
+    type: str,
+    start: datetime,
+    end: datetime,
+) -> list[tuple[int, int]]:
+    if type == "income":
+        rows = db.execute(
+            select(Transaction.category_id, func.coalesce(func.sum(Transaction.amount_cents), 0))
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.type == "income",
+                Transaction.category_id.is_not(None),
+                Transaction.occurred_at >= start,
+                Transaction.occurred_at < end,
+            )
+            .group_by(Transaction.category_id)
+        ).all()
+        return [(int(cid), int(amt or 0)) for cid, amt in rows if cid is not None]
+
+    expense = aliased(Transaction)
+    refund = aliased(Transaction)
+    expense_rows = db.execute(
+        select(expense.category_id, func.coalesce(func.sum(expense.amount_cents), 0))
+        .where(
+            expense.user_id == user_id,
+            expense.type == "expense",
+            expense.category_id.is_not(None),
+            expense.occurred_at >= start,
+            expense.occurred_at < end,
+        )
+        .group_by(expense.category_id)
+    ).all()
+    refund_rows = db.execute(
+        select(expense.category_id, func.coalesce(func.sum(refund.amount_cents), 0))
+        .select_from(refund)
+        .join(expense, refund.refund_of_transaction_id == expense.id)
+        .where(
+            refund.user_id == user_id,
+            refund.type == "refund",
+            expense.user_id == user_id,
+            expense.type == "expense",
+            expense.category_id.is_not(None),
+            expense.occurred_at >= start,
+            expense.occurred_at < end,
+        )
+        .group_by(expense.category_id)
+    ).all()
+    expense_kv = [(int(cid), int(amt or 0)) for cid, amt in expense_rows if cid is not None]
+    refund_kv = [(int(cid), int(amt or 0)) for cid, amt in refund_rows if cid is not None]
+    net_map = _merge_net(expense_kv, refund_kv)
+    return [(cid, max(0, int(net_amt or 0))) for (cid,), net_amt in net_map.items()]
 
 
 def _parse_yyyy_mm(value: str) -> tuple[int, int]:
@@ -104,13 +229,14 @@ def expense_item_stats(
     current_user: User = Depends(get_current_user),
 ) -> ExpenseItemStatsOut:
     category_ids = _descendant_category_ids(db, current_user.id, int(categoryId))
+    user_zone = _user_zone(current_user)
 
     scope = "year"
     if month is None:
-        start, end = _year_bounds_utc_naive(year)
+        start, end = _year_bounds_utc_naive(year, user_zone)
     else:
         scope = "month"
-        start, end = _month_bounds_utc_naive(year, int(month))
+        start, end = _month_bounds_utc_naive(year, int(month), user_zone)
 
     expense = aliased(Transaction)
     refund = aliased(Transaction)
@@ -120,8 +246,8 @@ def expense_item_stats(
             expense.user_id == current_user.id,
             expense.type == "expense",
             expense.category_id.in_(category_ids),
-            expense.occurred_at >= to_utc_naive(start),
-            expense.occurred_at < to_utc_naive(end),
+            expense.occurred_at >= start,
+            expense.occurred_at < end,
         )
     )
 
@@ -135,8 +261,8 @@ def expense_item_stats(
             expense.user_id == current_user.id,
             expense.type == "expense",
             expense.category_id.in_(category_ids),
-            expense.occurred_at >= to_utc_naive(start),
-            expense.occurred_at < to_utc_naive(end),
+            expense.occurred_at >= start,
+            expense.occurred_at < end,
         )
     )
 
@@ -147,8 +273,8 @@ def expense_item_stats(
             expense.type == "expense",
             expense.category_id.is_not(None),
             expense.category_id.in_(category_ids),
-            expense.occurred_at >= to_utc_naive(start),
-            expense.occurred_at < to_utc_naive(end),
+            expense.occurred_at >= start,
+            expense.occurred_at < end,
         )
         .group_by(expense.category_id)
     ).all()
@@ -164,8 +290,8 @@ def expense_item_stats(
             expense.type == "expense",
             expense.category_id.is_not(None),
             expense.category_id.in_(category_ids),
-            expense.occurred_at >= to_utc_naive(start),
-            expense.occurred_at < to_utc_naive(end),
+            expense.occurred_at >= start,
+            expense.occurred_at < end,
         )
         .group_by(expense.category_id)
     ).all()
@@ -206,7 +332,8 @@ def year_category_stats(
     if type not in ("income", "expense"):
         raise HTTPException(status_code=400, detail="Invalid type")
 
-    start, end = _year_bounds_utc_naive(year)
+    user_zone = _user_zone(current_user)
+    start, end = _year_bounds_utc_naive(year, user_zone)
 
     if type == "income":
         breakdown_rows = db.execute(
@@ -215,8 +342,8 @@ def year_category_stats(
                 Transaction.user_id == current_user.id,
                 Transaction.type == "income",
                 Transaction.category_id.is_not(None),
-                Transaction.occurred_at >= to_utc_naive(start),
-                Transaction.occurred_at < to_utc_naive(end),
+                Transaction.occurred_at >= start,
+                Transaction.occurred_at < end,
             )
             .group_by(Transaction.category_id)
         ).all()
@@ -230,8 +357,8 @@ def year_category_stats(
                 expense.user_id == current_user.id,
                 expense.type == "expense",
                 expense.category_id.is_not(None),
-                expense.occurred_at >= to_utc_naive(start),
-                expense.occurred_at < to_utc_naive(end),
+                expense.occurred_at >= start,
+                expense.occurred_at < end,
             )
             .group_by(expense.category_id)
         ).all()
@@ -245,8 +372,8 @@ def year_category_stats(
                 expense.user_id == current_user.id,
                 expense.type == "expense",
                 expense.category_id.is_not(None),
-                expense.occurred_at >= to_utc_naive(start),
-                expense.occurred_at < to_utc_naive(end),
+                expense.occurred_at >= start,
+                expense.occurred_at < end,
             )
             .group_by(expense.category_id)
         ).all()
@@ -262,77 +389,13 @@ def year_category_stats(
         if category_id is not None
     ]
 
-    # Monthly totals (YYYY-MM)
-    if type == "income":
-        year_key = func.year(Transaction.occurred_at)
-        month_key = func.month(Transaction.occurred_at)
-        monthly_rows = db.execute(
-            select(year_key, month_key, func.coalesce(func.sum(Transaction.amount_cents), 0))
-            .where(
-                Transaction.user_id == current_user.id,
-                Transaction.type == "income",
-                Transaction.occurred_at >= to_utc_naive(start),
-                Transaction.occurred_at < to_utc_naive(end),
-            )
-            .group_by(year_key, month_key)
-            .order_by(year_key.asc(), month_key.asc())
-        ).all()
-    else:
-        expense = aliased(Transaction)
-        refund = aliased(Transaction)
-        year_key = func.year(expense.occurred_at)
-        month_key = func.month(expense.occurred_at)
-
-        expense_rows = db.execute(
-            select(year_key, month_key, func.coalesce(func.sum(expense.amount_cents), 0))
-            .where(
-                expense.user_id == current_user.id,
-                expense.type == "expense",
-                expense.occurred_at >= to_utc_naive(start),
-                expense.occurred_at < to_utc_naive(end),
-            )
-            .group_by(year_key, month_key)
-        ).all()
-        refund_rows = db.execute(
-            select(year_key, month_key, func.coalesce(func.sum(refund.amount_cents), 0))
-            .select_from(refund)
-            .join(expense, refund.refund_of_transaction_id == expense.id)
-            .where(
-                refund.user_id == current_user.id,
-                refund.type == "refund",
-                expense.user_id == current_user.id,
-                expense.type == "expense",
-                expense.occurred_at >= to_utc_naive(start),
-                expense.occurred_at < to_utc_naive(end),
-            )
-            .group_by(year_key, month_key)
-        ).all()
-
-        expense_kv = [
-            (int(y), int(m), int(amt or 0))
-            for y, m, amt in expense_rows
-            if y is not None and m is not None
-        ]
-        refund_kv = [
-            (int(y), int(m), int(amt or 0))
-            for y, m, amt in refund_rows
-            if y is not None and m is not None
-        ]
-        net_map = _merge_net(expense_kv, refund_kv)
-        monthly_rows = [
-            (yy, mm, max(0, int(net_amt or 0)))
-            for (yy, mm), net_amt in net_map.items()
-        ]
-        monthly_rows.sort(key=lambda x: (int(x[0]), int(x[1])))
-
     monthly_totals = []
     total_cents = 0
-    for y, m, amount in monthly_rows:
-        if y is None or m is None:
-            continue
-        month_str = f"{int(y):04d}-{int(m):02d}"
-        amt = int(amount or 0)
-        monthly_totals.append({"month": month_str, "amountCents": amt})
+    for month_index in range(1, 13):
+        month_start, month_end = _month_bounds_utc_naive(year, month_index, user_zone)
+        amt = _sum_type_period(db, current_user.id, type, month_start, month_end)
+        if amt > 0:
+            monthly_totals.append({"month": f"{year:04d}-{month_index:02d}", "amountCents": amt})
         total_cents += amt
 
     # If no monthly rows (e.g. no tx), still compute total from breakdown
@@ -358,105 +421,19 @@ def yoy_monthly_stats(
     if type not in ("income", "expense"):
         raise HTTPException(status_code=400, detail="Invalid type")
 
-    cur_start, cur_end = _year_bounds_utc_naive(year)
-    prev_start, _prev_end = _year_bounds_utc_naive(year - 1)
-
-    if type == "income":
-        year_key = func.year(Transaction.occurred_at)
-        month_key = func.month(Transaction.occurred_at)
-        rows = db.execute(
-            select(
-                year_key,
-                month_key,
-                Transaction.category_id,
-                func.coalesce(func.sum(Transaction.amount_cents), 0),
-            )
-            .where(
-                Transaction.user_id == current_user.id,
-                Transaction.type == "income",
-                Transaction.category_id.is_not(None),
-                Transaction.occurred_at >= to_utc_naive(prev_start),
-                Transaction.occurred_at < to_utc_naive(cur_end),
-            )
-            .group_by(year_key, month_key, Transaction.category_id)
-            .order_by(year_key.asc(), month_key.asc())
-        ).all()
-    else:
-        expense = aliased(Transaction)
-        refund = aliased(Transaction)
-        year_key = func.year(expense.occurred_at)
-        month_key = func.month(expense.occurred_at)
-
-        expense_rows = db.execute(
-            select(
-                year_key,
-                month_key,
-                expense.category_id,
-                func.coalesce(func.sum(expense.amount_cents), 0),
-            )
-            .where(
-                expense.user_id == current_user.id,
-                expense.type == "expense",
-                expense.category_id.is_not(None),
-                expense.occurred_at >= to_utc_naive(prev_start),
-                expense.occurred_at < to_utc_naive(cur_end),
-            )
-            .group_by(year_key, month_key, expense.category_id)
-        ).all()
-        refund_rows = db.execute(
-            select(
-                year_key,
-                month_key,
-                expense.category_id,
-                func.coalesce(func.sum(refund.amount_cents), 0),
-            )
-            .select_from(refund)
-            .join(expense, refund.refund_of_transaction_id == expense.id)
-            .where(
-                refund.user_id == current_user.id,
-                refund.type == "refund",
-                expense.user_id == current_user.id,
-                expense.type == "expense",
-                expense.category_id.is_not(None),
-                expense.occurred_at >= to_utc_naive(prev_start),
-                expense.occurred_at < to_utc_naive(cur_end),
-            )
-            .group_by(year_key, month_key, expense.category_id)
-        ).all()
-
-        expense_kv = [
-            (int(y), int(m), int(cid), int(amt or 0))
-            for y, m, cid, amt in expense_rows
-            if y is not None and m is not None and cid is not None
-        ]
-        refund_kv = [
-            (int(y), int(m), int(cid), int(amt or 0))
-            for y, m, cid, amt in refund_rows
-            if y is not None and m is not None and cid is not None
-        ]
-        net_map = _merge_net(expense_kv, refund_kv)
-        rows = [
-            (yy, mm, cc, max(0, int(net_amt or 0)))
-            for (yy, mm, cc), net_amt in net_map.items()
-        ]
-        rows.sort(key=lambda x: (int(x[0]), int(x[1])))
-
-    # Build per-month maps for current and previous year (month index 1..12)
+    user_zone = _user_zone(current_user)
     cur_month_maps: dict[int, dict[int, int]] = {m: {} for m in range(1, 13)}
     prev_month_maps: dict[int, dict[int, int]] = {m: {} for m in range(1, 13)}
 
-    for y, m, category_id, amount in rows:
-        if y is None or m is None or category_id is None:
-            continue
-        mm = int(m)
-        if mm < 1 or mm > 12:
-            continue
-        cid = int(category_id)
-        amt = int(amount or 0)
-        if int(y) == year:
-            cur_month_maps[mm][cid] = cur_month_maps[mm].get(cid, 0) + amt
-        elif int(y) == year - 1:
-            prev_month_maps[mm][cid] = prev_month_maps[mm].get(cid, 0) + amt
+    for month_index in range(1, 13):
+        cur_start, cur_end = _month_bounds_utc_naive(year, month_index, user_zone)
+        prev_start, prev_end = _month_bounds_utc_naive(year - 1, month_index, user_zone)
+        cur_month_maps[month_index] = dict(
+            _category_rows_for_period(db, current_user.id, type, cur_start, cur_end)
+        )
+        prev_month_maps[month_index] = dict(
+            _category_rows_for_period(db, current_user.id, type, prev_start, prev_end)
+        )
 
     series: list[YoYMonthlyPoint] = []
     for mm in range(1, 13):
@@ -489,6 +466,53 @@ def yoy_monthly_stats(
     )
 
 
+@router.get("/mom", response_model=MoMStatsOut)
+def mom_stats(
+    year: int,
+    month: int,
+    type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MoMStatsOut:
+    if type not in ("income", "expense"):
+        raise HTTPException(status_code=400, detail="Invalid type")
+
+    user_zone = _user_zone(current_user)
+    current_start, current_end = _month_bounds_utc_naive(year, month, user_zone)
+    if month == 1:
+        previous_year, previous_month = year - 1, 12
+    else:
+        previous_year, previous_month = year, month - 1
+    previous_start, previous_end = _month_bounds_utc_naive(previous_year, previous_month, user_zone)
+
+    current_map = dict(
+        _category_rows_for_period(db, current_user.id, type, current_start, current_end)
+    )
+    previous_map = dict(
+        _category_rows_for_period(db, current_user.id, type, previous_start, previous_end)
+    )
+
+    keys = sorted(set(current_map.keys()) | set(previous_map.keys()))
+    items = [
+        MonthCategoryCompare(
+            categoryId=category_id,
+            currentCents=int(current_map.get(category_id, 0)),
+            previousCents=int(previous_map.get(category_id, 0)),
+        )
+        for category_id in keys
+    ]
+    items.sort(key=lambda x: (x.currentCents + x.previousCents, x.currentCents), reverse=True)
+
+    return MoMStatsOut(
+        type=type,
+        currentLabel=f"{year:04d}-{month:02d}",
+        previousLabel=f"{previous_year:04d}-{previous_month:02d}",
+        currentTotalCents=_sum_type_period(db, current_user.id, type, current_start, current_end),
+        previousTotalCents=_sum_type_period(db, current_user.id, type, previous_start, previous_end),
+        items=items,
+    )
+
+
 @router.get("/monthly-range", response_model=MonthlyRangeOut)
 def monthly_range(
     startMonth: str,
@@ -499,114 +523,26 @@ def monthly_range(
     sy, sm = _parse_yyyy_mm(startMonth)
     ey, em = _parse_yyyy_mm(endMonth)
 
-    start, _ = _month_bounds_utc_naive(sy, sm)
-    end, _end2 = _month_bounds_utc_naive(ey, em)
-    # end should be start of next month
-    if em == 12:
-        end = datetime(ey + 1, 1, 1)
-    else:
-        end = datetime(ey, em + 1, 1)
+    user_zone = _user_zone(current_user)
+    start, _ = _month_bounds_utc_naive(sy, sm, user_zone)
+    _, end = _month_bounds_utc_naive(ey, em, user_zone)
 
-    if to_utc_naive(end) <= to_utc_naive(start):
+    if end <= start:
         raise HTTPException(status_code=400, detail="Invalid month range")
 
-    year_key = func.year(Transaction.occurred_at)
-    month_key = func.month(Transaction.occurred_at)
-
-    income_rows = db.execute(
-        select(
-            year_key,
-            month_key,
-            func.coalesce(func.sum(Transaction.amount_cents), 0),
-        )
-        .where(
-            Transaction.user_id == current_user.id,
-            Transaction.type == "income",
-            Transaction.occurred_at >= to_utc_naive(start),
-            Transaction.occurred_at < to_utc_naive(end),
-        )
-        .group_by(year_key, month_key)
-        .order_by(year_key.asc(), month_key.asc())
-    ).all()
-
-    expense = aliased(Transaction)
-    refund = aliased(Transaction)
-    exp_year_key = func.year(expense.occurred_at)
-    exp_month_key = func.month(expense.occurred_at)
-    expense_rows = db.execute(
-        select(
-            exp_year_key,
-            exp_month_key,
-            func.coalesce(func.sum(expense.amount_cents), 0),
-        )
-        .where(
-            expense.user_id == current_user.id,
-            expense.type == "expense",
-            expense.occurred_at >= to_utc_naive(start),
-            expense.occurred_at < to_utc_naive(end),
-        )
-        .group_by(exp_year_key, exp_month_key)
-    ).all()
-    refund_rows = db.execute(
-        select(
-            exp_year_key,
-            exp_month_key,
-            func.coalesce(func.sum(refund.amount_cents), 0),
-        )
-        .select_from(refund)
-        .join(expense, refund.refund_of_transaction_id == expense.id)
-        .where(
-            refund.user_id == current_user.id,
-            refund.type == "refund",
-            expense.user_id == current_user.id,
-            expense.type == "expense",
-            expense.occurred_at >= to_utc_naive(start),
-            expense.occurred_at < to_utc_naive(end),
-        )
-        .group_by(exp_year_key, exp_month_key)
-    ).all()
-
-    expense_kv = [
-        (int(y), int(m), int(amt or 0))
-        for y, m, amt in expense_rows
-        if y is not None and m is not None
-    ]
-    refund_kv = [
-        (int(y), int(m), int(amt or 0))
-        for y, m, amt in refund_rows
-        if y is not None and m is not None
-    ]
-    exp_net_map = _merge_net(expense_kv, refund_kv)
-
-    # Fill month buckets
     series_map: dict[str, MonthlyInOut] = {}
     cursor_y, cursor_m = sy, sm
     while True:
         key = f"{cursor_y:04d}-{cursor_m:02d}"
-        series_map[key] = MonthlyInOut(month=key, incomeCents=0, expenseCents=0)
+        month_start, month_end = _month_bounds_utc_naive(cursor_y, cursor_m, user_zone)
+        series_map[key] = MonthlyInOut(
+            month=key,
+            incomeCents=_sum_type_period(db, current_user.id, "income", month_start, month_end),
+            expenseCents=_sum_type_period(db, current_user.id, "expense", month_start, month_end),
+        )
         if cursor_y == ey and cursor_m == em:
             break
-        if cursor_m == 12:
-            cursor_y += 1
-            cursor_m = 1
-        else:
-            cursor_m += 1
-
-    for y, m, amount in income_rows:
-        if y is None or m is None:
-            continue
-        month_str = f"{int(y):04d}-{int(m):02d}"
-        bucket = series_map.get(month_str)
-        if not bucket:
-            continue
-        bucket.incomeCents = int(amount or 0)
-
-    for (y, m), net_amt in exp_net_map.items():
-        month_str = f"{int(y):04d}-{int(m):02d}"
-        bucket = series_map.get(month_str)
-        if not bucket:
-            continue
-        bucket.expenseCents = max(0, int(net_amt or 0))
+        cursor_y, cursor_m = _next_month(cursor_y, cursor_m)
 
     return MonthlyRangeOut(
         startMonth=startMonth,
@@ -626,53 +562,9 @@ def month_category_stats(
         raise HTTPException(status_code=400, detail="Invalid type")
 
     y, m = _parse_yyyy_mm(month)
-    start, end = _month_bounds_utc_naive(y, m)
-
-    if type == "income":
-        rows = db.execute(
-            select(Transaction.category_id, func.coalesce(func.sum(Transaction.amount_cents), 0))
-            .where(
-                Transaction.user_id == current_user.id,
-                Transaction.type == "income",
-                Transaction.category_id.is_not(None),
-                Transaction.occurred_at >= to_utc_naive(start),
-                Transaction.occurred_at < to_utc_naive(end),
-            )
-            .group_by(Transaction.category_id)
-        ).all()
-    else:
-        expense = aliased(Transaction)
-        refund = aliased(Transaction)
-        expense_rows = db.execute(
-            select(expense.category_id, func.coalesce(func.sum(expense.amount_cents), 0))
-            .where(
-                expense.user_id == current_user.id,
-                expense.type == "expense",
-                expense.category_id.is_not(None),
-                expense.occurred_at >= to_utc_naive(start),
-                expense.occurred_at < to_utc_naive(end),
-            )
-            .group_by(expense.category_id)
-        ).all()
-        refund_rows = db.execute(
-            select(expense.category_id, func.coalesce(func.sum(refund.amount_cents), 0))
-            .select_from(refund)
-            .join(expense, refund.refund_of_transaction_id == expense.id)
-            .where(
-                refund.user_id == current_user.id,
-                refund.type == "refund",
-                expense.user_id == current_user.id,
-                expense.type == "expense",
-                expense.category_id.is_not(None),
-                expense.occurred_at >= to_utc_naive(start),
-                expense.occurred_at < to_utc_naive(end),
-            )
-            .group_by(expense.category_id)
-        ).all()
-        expense_kv = [(int(cid), int(amt or 0)) for cid, amt in expense_rows if cid is not None]
-        refund_kv = [(int(cid), int(amt or 0)) for cid, amt in refund_rows if cid is not None]
-        net_map = _merge_net(expense_kv, refund_kv)
-        rows = [(cid, max(0, int(net_amt or 0))) for (cid,), net_amt in net_map.items()]
+    user_zone = _user_zone(current_user)
+    start, end = _month_bounds_utc_naive(y, m, user_zone)
+    rows = _category_rows_for_period(db, current_user.id, type, start, end)
 
     breakdown = [
         {"categoryId": int(category_id), "amountCents": int(amount)}
