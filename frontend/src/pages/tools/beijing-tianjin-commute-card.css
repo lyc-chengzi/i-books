@@ -1,0 +1,286 @@
+/* BeijingTianjinCommuteCardPage scoped styles */
+
+.commuteCardPage {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.commuteCardPage__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.commuteCardPage__title,
+.ant-typography.commuteCardPage__title {
+  margin: 0;
+}
+
+.commuteCardPage__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.commuteCardTile {
+  height: 100%;
+  border-color: rgba(0, 0, 0, 0.05);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(252, 248, 246, 0.92)),
+    radial-gradient(circle at top right, rgba(217, 58, 47, 0.08), transparent 42%);
+}
+
+.commuteCardTile:hover {
+  border-color: color-mix(in srgb, var(--ant-colorPrimary, var(--app-accent)) 30%, rgba(0, 0, 0, 0.06));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.11);
+}
+
+.commuteCardTile .ant-card-body {
+  height: 100%;
+  display: grid;
+  gap: 14px;
+}
+
+.commuteCardTile__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.commuteCardTile__count {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.commuteCardTile__main {
+  display: grid;
+  gap: 6px;
+}
+
+.commuteCardTile__subtext {
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.commuteCardTile__meta {
+  display: grid;
+  gap: 4px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.commuteCardTile__meta span {
+  display: block;
+}
+
+.commuteCardTile__progress {
+  display: flex;
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.commuteCardTile__progressSegment {
+  height: 100%;
+}
+
+.commuteCardTile__progressSegment--used {
+  background: #52c41a;
+}
+
+.commuteCardTile__progressSegment--pending {
+  background: #faad14;
+}
+
+.commuteCardTile__progressSegment--remaining {
+  background: #d9d9d9;
+}
+
+.commuteCardMetric {
+  font-weight: 500;
+}
+
+.commuteCardMetric--remaining {
+  color: #8c8c8c;
+}
+
+.commuteCardMetric--used {
+  color: #52c41a;
+}
+
+.commuteCardMetric--pending {
+  color: #faad14;
+}
+
+.commuteCardTile__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.commuteCardPage__blankState {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--app-divider);
+  border-radius: var(--app-radius-lg);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.commuteDrawer {
+  display: grid;
+  gap: 18px;
+}
+
+.commuteDrawer__descriptions .ant-descriptions-item-label {
+  color: var(--app-text-secondary);
+}
+
+.commuteDrawer__listHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.commuteDrawer__listTitle,
+.ant-typography.commuteDrawer__listTitle {
+  margin: 0;
+}
+
+.commuteDrawer__progress {
+  margin-top: -2px;
+}
+
+.commuteReservationList {
+  display: grid;
+  gap: 12px;
+}
+
+.reservationListItem {
+  padding: 14px 0;
+  border-top: 1px solid rgba(5, 5, 5, 0.06);
+}
+
+.reservationListItem:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.reservationRow {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.reservationRow__main {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.reservationRow__headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reservationRow__time {
+  font-size: 16px;
+}
+
+.reservationRow__tags {
+  min-width: 0;
+}
+
+.reservationRow__side {
+  flex: none;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.reservationRow__meta {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.commuteModalForm {
+  display: grid;
+  gap: 14px;
+}
+
+.commuteFieldLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.commuteFieldLabel__required {
+  color: var(--ant-colorError, #ff4d4f);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.commuteModalForm__control {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.commuteModalForm__split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.commuteModalForm__triplet {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .commuteCardPage__toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .commuteDrawer__listHeader,
+  .reservationRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .reservationRow__side {
+    width: 100%;
+    justify-items: start;
+  }
+
+  .commuteModalForm__split {
+    grid-template-columns: 1fr;
+  }
+
+  .commuteModalForm__triplet {
+    grid-template-columns: 1fr;
+  }
+}

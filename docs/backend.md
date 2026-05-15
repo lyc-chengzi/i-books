@@ -1,295 +1,296 @@
-# iBooks 后端说明（backend）
+# iBooks 后端总体设计（backend）
 
-本文档基于当前仓库的后端实现整理，目标是让维护者快速了解：
-- 后端技术栈与目录结构
-- 配置项（环境变量）与本地运行方式
-- 数据库（SQL Server）连接方式与迁移策略
-- 鉴权机制与 API 路由概览
-- 关键业务规则（叶子分类、资金来源、退款/转账等）
-- 统计口径（尤其是“支出扣退款”的净额口径）
+本文档只保留后端的总体设计、分层架构、公共约束、运行方式与通用开发规则。
+
+具体接口行为、模块业务细节和页面联动语义，不再继续堆放在这里，应该沉淀到专项文档、代码实现和迁移说明中。
 
 ---
 
-## 1. 技术栈与依赖
+## 1. 设计目标
 
-后端位于 `backend/`，主要依赖见 `backend/requirements.txt`：
-- Web 框架：FastAPI + Uvicorn
-- ORM：SQLAlchemy 2.x
-- 迁移：Alembic
-- 数据库：SQL Server（通过 `mssql+pyodbc`）
-- DTO/校验：Pydantic v2 + pydantic-settings
-- 鉴权：JWT（HS256，python-jose）
-- 密码：bcrypt（passlib + bcrypt）
+后端的职责是：
+- 提供稳定明确的领域模型与数据持久化能力。
+- 对关键业务规则做最终强校验。
+- 向前端提供一致的 API 边界与权限控制。
+- 让统计结果可以从原始流水和维表稳定重算。
+
+当前后端采用“FastAPI 路由层 + SQLAlchemy 持久化层 + Pydantic schema 层 + Alembic 迁移层”的分层方式。
 
 ---
 
-## 2. 目录结构
+## 2. 技术栈
 
-- `backend/app/main.py`
-  - FastAPI 入口：CORS、挂载路由、可选静态托管前端 dist、SPA fallback
-  - 启动时执行 `ensure_seed_data`
+- FastAPI + Uvicorn
+- SQLAlchemy 2.x
+- Alembic
+- SQL Server + pyodbc
+- Pydantic v2 + pydantic-settings
+- python-jose
+- passlib + bcrypt
 
-- `backend/app/core/config.py`
-  - `Settings`：所有环境变量配置（前缀 `IBOOKS_`）
+设计取向：
+- FastAPI 负责 API 组织、依赖注入和响应模型。
+- SQLAlchemy 负责模型映射与数据库交互。
+- Alembic 负责 schema 演进。
+- Pydantic 负责请求/响应校验。
+- JWT + Cookie 共同支撑鉴权体验。
 
-- `backend/app/core/security.py`
-  - 密码 hash/verify（bcrypt）
-  - JWT token create/decode（HS256）
+---
 
-- `backend/app/db/session.py`
-  - SQL Server 连接串构造（ODBC Connection String）
-  - SQLAlchemy engine / SessionLocal
+## 3. 架构分层
 
-- `backend/app/db/init_db.py`
-  - 启动自检/初始化：创建默认 admin、初始化默认分类根
+### 3.1 应用入口层
 
-- `backend/app/api/routers/*`
-  - 各模块 API 路由（统一挂载到 `/api`）
+入口文件：
+- [backend/app/main.py](../backend/app/main.py)
 
-- `backend/app/models/*`
-  - SQLAlchemy 模型
+职责：
+- 创建 FastAPI 应用
+- 注册路由
+- 配置 CORS
+- 按需挂载前端静态资源
+- 启动时执行基础初始化
 
+### 3.2 配置与安全层
+
+核心文件：
+- [backend/app/core/config.py](../backend/app/core/config.py)
+- [backend/app/core/security.py](../backend/app/core/security.py)
+
+职责：
+- 统一读取环境变量配置
+- 统一密码哈希与校验
+- 统一 JWT 创建与解析
+
+### 3.3 数据访问层
+
+核心文件：
+- [backend/app/db/session.py](../backend/app/db/session.py)
+- [backend/app/db/init_db.py](../backend/app/db/init_db.py)
+
+职责：
+- 构造数据库连接
+- 提供会话工厂
+- 执行启动初始化和 seed 检查
+
+### 3.4 路由层
+
+目录：
+- `backend/app/api/routers/`
+
+职责：
+- 接收请求
+- 调用依赖注入获取当前用户和数据库会话
+- 完成参数校验、权限校验、业务编排和响应构造
+
+约定：
+- 路由层负责业务边界，不承载与 HTTP 无关的杂糅逻辑。
+
+### 3.5 模型与 schema 层
+
+目录：
+- `backend/app/models/`
+- `backend/app/schemas/`
+
+职责：
+- models 定义持久化结构和关系
+- schemas 定义请求/响应与序列化边界
+
+### 3.6 迁移层
+
+目录：
 - `backend/alembic/`
-  - Alembic 配置与迁移脚本（`versions/`）
+- `backend/alembic/versions/`
+
+职责：
+- 管理 schema 演进
+- 记录结构性变更历史
+
+约定：
+- 数据结构变更必须伴随迁移。
+- 迁移优先保证向前演进，不依赖手工改库。
 
 ---
 
-## 3. 配置与环境变量（Settings）
+## 4. 核心领域设计
 
-配置类：`backend/app/core/config.py`，统一使用前缀 `IBOOKS_`，支持从 `.env` 加载。
+当前后端围绕以下核心领域组织：
+- 用户与权限
+- 分类树与标签
+- 银行账户
+- 流水与退款
+- 转账
+- 统计聚合
+- 工具类扩展数据
+- 审计日志
 
-### 3.1 数据库
-
-- `IBOOKS_DB_SERVER`：默认 `.\SQLEXPRESS`
-- `IBOOKS_DB_NAME`：默认 `iBooks`
-- `IBOOKS_DB_TRUSTED_CONNECTION`：默认 `True`（Windows 身份验证）
-- `IBOOKS_DB_USER` / `IBOOKS_DB_PASSWORD`：当 `Trusted_Connection=False` 时必填
-- `IBOOKS_DB_DRIVER`：默认 `ODBC Driver 17 for SQL Server`
-
-连接方式：`backend/app/db/session.py` 使用 ODBC 连接串并通过 `quote_plus` 组装到 SQLAlchemy URL：
-- `mssql+pyodbc:///?odbc_connect=<ODBC_STRING>`
-
-### 3.2 鉴权
-
-- `IBOOKS_JWT_SECRET`：JWT 密钥（默认值仅用于开发；部署时必须替换）
-- `IBOOKS_JWT_EXPIRE_MINUTES`：默认 60
-
-Cookie 模式（用于本地部署体验）：
-- `IBOOKS_AUTH_COOKIE_NAME`：默认 `ibooks_auth`
-- `IBOOKS_AUTH_COOKIE_SAMESITE`：默认 `lax`
-- `IBOOKS_AUTH_COOKIE_SECURE`：默认 `False`
-
-说明：后端同时支持两种 token 传递方式：
-- `Authorization: Bearer <token>`（HTTP Bearer）
-- HttpOnly Cookie（`ibooks_auth`）
-
-### 3.3 CORS 与静态托管前端
-
-- `IBOOKS_CORS_ORIGINS`：逗号分隔；默认允许本地 5173/8010
-- `IBOOKS_SERVE_FRONTEND`：是否由后端托管 Vite 构建产物（默认 `False`）
-- `IBOOKS_FRONTEND_DIST_DIR`：默认 `../frontend/dist`（支持相对/绝对路径）
-
----
-
-## 4. 本地运行与迁移
-
-### 4.1 迁移（Alembic）
-
-后端依赖 Alembic 维护 schema：
-- 迁移脚本：`backend/alembic/versions/*.py`
-- 多数迁移脚本不支持 downgrade（`raise NotImplementedError`），建议仅“向前迁移”。
-
-启动时的自检：`backend/app/db/init_db.py` 会检查 `users.role` 是否存在；若缺失会直接抛错提示执行：
-- `alembic upgrade head`
-
-### 4.2 启动初始化（seed）
-
-`ensure_seed_data` 做两件事：
-- 若用户表为空：创建默认管理员（`admin/admin`）
-- 若分类表存在且当前用户没有任何分类：创建默认收入/支出根与默认子类
-
-### 4.3 启动服务
-
-常见命令（在 `backend/` 目录）：
-- `uvicorn app.main:app --reload`
+总体原则：
+- 一切统计都应可由原始流水和维表重算。
+- 历史数据优先保证可追溯。
+- 公共规则由后端做最终校验，前端校验只是辅助体验。
 
 ---
 
 ## 5. 鉴权与权限模型
 
-### 5.1 JWT + Cookie
+### 5.1 鉴权方式
 
-- 登录成功后会签发 JWT（sub 为 user.id），并：
-  - 返回 `access_token`
-  - 同时写入 HttpOnly Cookie（默认 `ibooks_auth`），用于刷新页面后仍保持登录
+后端同时支持：
+- `Authorization: Bearer <token>`
+- HttpOnly Cookie
 
-### 5.2 当前用户解析
+公共约束：
+- JWT 密钥只从环境变量读取。
+- 登录成功后可以同时返回 token 并写入 cookie。
+- 当前用户解析必须检查用户存在且处于启用状态。
 
-依赖注入：`backend/app/api/deps.py`
-- 优先从 Bearer Token 取 token
-- 否则从 Cookie 取 token
-- 校验 token 后按 user_id 加载用户，并要求 `is_active=True`
+### 5.2 权限原则
 
-### 5.3 管理员权限
-
-- `require_admin_user`：仅 `User.role == admin` 通过
-- 用户管理与注册接口需要管理员
-
----
-
-## 6. 数据库设计（核心表）
-
-### 6.1 users
-
-- `id`, `username`(唯一), `password_hash`, `is_active`, `time_zone`, `role`(admin/user)
-
-### 6.2 categories（分类树）
-
-- `id`, `user_id`, `type`(income/expense), `name`, `parent_id`, `sort_order`, `is_active`
-- 分类树在后端以“父子关系 + 排序字段”维护
-
-### 6.3 bank_accounts（银行账户）
-
-- `id`, `user_id`, `bank_name`, `alias`, `last4`, `kind`(debit/credit), `balance_cents`
-- 信用卡字段：`billing_day`, `repayment_day`
-- `is_active`
-
-### 6.4 transactions（流水）
-
-- `id`, `user_id`
-- `type`：`income | expense | transfer | refund`
-- `amount_cents`（整数分）
-- `occurred_at`（UTC naive datetime；前端以 ISO8601 提交）
-- `created_at`（数据库 `SYSUTCDATETIME()` 默认值）
-- 分类：`category_id`（当前主口径）
-- 资金来源：`funding_source`（cash/bank）
-- 银行账户：`bank_account_id`（bank 时必有）
-- 转账目标：`to_bank_account_id`（transfer 时使用）
-- 退款关联：`refund_of_transaction_id`（refund 指向被退款的 expense）
-- `note`
-
-说明：
-- `account_item_id` 为历史字段（保留以兼容迁移）；当前业务主要使用 `category_id`。
-
-### 6.5 标签
-
-- `category_tags`：绑定到“费用一级分类（expense 根的直接子类）”
-- `transaction_tags`：流水与标签多对多（联合主键：`transaction_id + tag_id`）
-
-### 6.6 transaction_audit_logs（流水审计日志）
-
-用于记录“流水的新增/编辑/删除”操作历史，便于管理员追溯。
-
-- 记录维度：仅记录 `transactions` 的变更（包含 income/expense/transfer/refund 的 create，以及 income/expense 的 update，和所有类型的 delete）
-- 日志保留：`transaction_id` 不做外键约束（避免流水删除后日志被级联删除）
-- 字段：
-  - `action`：`create|update|delete`
-  - `actor_user_id`：执行操作的用户
-  - `target_user_id`：被影响账本所属用户（一般等于 transaction.user_id）
-  - `transaction_id` / `tx_type`
-  - `before_json` / `after_json`：变更前后快照（JSON 文本；包含 occurredAt、amount、分类、资金来源、账户、标签等）
+- 默认所有业务接口都要求已登录。
+- 管理员能力必须在服务端单独校验，不能只依赖前端隐藏入口。
+- 数据访问按 `user_id` 做隔离。
 
 ---
 
-## 7. API 路由概览
+## 6. 数据与口径约定
 
-所有路由统一前缀：`/api`（见 `backend/app/main.py`）。
+### 6.1 金额
 
-### 7.1 auth
+- 金额使用整数分存储与计算。
+- 汇总与统计直接基于最小货币单位完成，避免浮点误差。
 
-- `POST /api/auth/login`：登录（写 cookie，返回 token）
-- `POST /api/auth/logout`：清 cookie
-- `GET /api/auth/me`：当前用户
-- `POST /api/auth/register`：创建新用户（管理员）
+### 6.2 时间
 
-### 7.2 config
+- 时间统一以 UTC 相关口径存储。
+- 展示和统计边界要考虑用户时区，而不是只看数据库原始时间值。
 
-- `GET/POST/PATCH /api/config/bank-accounts`：银行账户增删改查
-- `GET /api/config/categories/tree`：分类树
-- `POST/PATCH/DELETE /api/config/categories`：分类节点维护
-- `GET/POST/DELETE /api/config/categories/{id}/tags`：费用一级分类的标签维护
-- `GET/POST/PATCH /api/config/users`：用户管理（管理员）
+### 6.3 分类与维表
 
-### 7.3 ledger
+- 分类树按父子关系维护。
+- 统计分组、标签归属、叶子选择等规则必须基于稳定维表实现。
 
-- `GET /api/ledger/transactions`：流水列表（服务端分页），并返回顶部汇总 `incomeCents/expenseCents`
-  - 可选排序参数：`sortBy=occurredAt`、`sortOrder=asc|desc`
-- `POST /api/ledger/transactions`：新增收入/支出
-- `PATCH /api/ledger/transactions/{id}`：编辑（不支持 transfer/refund）
-- `DELETE /api/ledger/transactions/{id}`：删除
-- `POST /api/ledger/transactions/{id}/refund`：对“银行卡支出”发起退款
-- `POST /api/ledger/transfers`：转账（在 transactions 中写一条 `type=transfer` 记录）
+### 6.4 可重算性
 
-### 7.4 stats
-
-- `GET /api/stats/year-category`：年度分类统计（收入/支出）
-- `GET /api/stats/month-category`：月度分类统计（收入/支出）
-- `GET /api/stats/yoy-monthly`：同比（按月 + 分类）
-- `GET /api/stats/monthly-range`：月份范围内按月收入/支出折线
-
-### 7.5 admin
-
-- `GET /api/admin/transaction-audit-logs`：流水审计日志（管理员）
-  - 支持分页：`page`、`pageSize`
-  - 可选排序：`order=asc|desc`（按日志创建时间）
-  - 可选过滤：`action`、`transactionId`、`txType`、`actorUserId`、`targetUserId`、`start`、`end`
+- 不把统计结果作为最终真相。
+- 聚合结果必须能够从流水和配置维表重新计算得到。
 
 ---
 
-## 8. 关键业务规则（后端强校验）
+## 7. 公共业务约束
 
-### 8.1 叶子分类必选
+以下约束属于后端应长期坚持的公共规则：
 
-创建/编辑支出或收入时：
-- 分类必须存在、属于当前用户、且启用
-- 必须是叶子节点（通过查询是否存在子节点判定）
+- 叶子分类约束：记账必须落到可用叶子节点。
+- 收支类型隔离：收入与支出不能混挂分类。
+- 资金来源约束：现金和银行卡的关联字段必须自洽。
+- 用户隔离：任意读写都必须限制在当前用户数据范围内。
+- 审计可追溯：关键流水变更应保留可审计信息。
+- 统计同口径：列表汇总与统计图表必须使用一致的业务口径。
 
-### 8.2 收入/支出类型不可混用
-
-- 支出流水只能挂到 expense 分类树
-- 收入流水只能挂到 income 分类树
-
-### 8.3 资金来源与银行账户
-
-创建流水时：
-- `funding_source=cash`：`bank_account_id` 必须为空
-- `funding_source=bank`：`bank_account_id` 必填且账户必须启用
-
-余额校验（借记卡）：
-- 借记卡（`kind=debit`）支出/转账会校验余额不能为负
-- 退款会增加余额
-
-### 8.4 转账
-
-- `fromBankAccountId != toBankAccountId`
-- 两个账户都必须启用
-- 借记卡转出不得透支
-
-### 8.5 退款
-
-- 仅支持对 `type=expense` 且 `funding_source=bank` 的流水退款
-- 退款会生成一条 `type=refund` 的流水，并通过 `refund_of_transaction_id` 指向原支出
-- 支持全额/部分退款；退款总额不得超过原始支出金额
+这些规则可以在各模块细化，但不能与这里的公共约束冲突。
 
 ---
 
-## 9. 统计与“支出扣退款”的口径
+## 8. 配置与环境变量
 
-本项目对“支出相关汇总/统计”统一采用**净支出**口径（见 docs/frontend.md 的口径说明），后端实现要点：
+配置入口：
+- [backend/app/core/config.py](../backend/app/core/config.py)
 
-- 退款以独立流水 `type=refund` 保存
-- 支出统计/汇总时，退款会冲减被退款的那条支出
-- 退款的归属按“原始支出发生日期（expense.occurred_at）”落桶，而不是 refund.occurred_at
+统一前缀：
+- `IBOOKS_`
 
-在后端接口层面的体现：
-- `GET /api/ledger/transactions` 返回的 `expenseCents` 为净支出
-- `GET /api/stats/*` 中 `type=expense` 的各类聚合，均按原始支出日期归属退款扣减
+主要配置类别：
+- 数据库连接
+- JWT 与 cookie
+- CORS
+- 前端静态资源托管
+
+公共约束：
+- 机密信息不写入仓库。
+- 本地开发允许默认值，部署环境必须显式配置关键项。
+- 数据库连接优先通过环境变量而不是散落常量控制。
 
 ---
 
-## 10. 静态托管与 SPA fallback
+## 9. 路由组织约定
 
-当 `IBOOKS_SERVE_FRONTEND=true` 且 `frontend/dist` 存在时：
-- 后端会将 dist 挂载到 `/`
-- 对非 `/api` 的 404 路径，会尝试回退到 `index.html`（用于 React Router 客户端路由）
+所有 API 统一挂在 `/api` 之下。
+
+当前按以下路由组组织：
+- `auth`
+- `config`
+- `ledger`
+- `stats`
+- `admin`
+- `tools`
+
+设计原则：
+- 路由按业务边界切分，而不是按表名机械切分。
+- 管理员接口与普通用户接口显式分组。
+- 新增模块优先评估是否属于现有边界，再决定是否新增 router。
+
+---
+
+## 10. 数据库与迁移约定
+
+### 10.1 数据库
+
+- 当前开发环境使用 SQL Server Express。
+- 连接通过 SQLAlchemy + pyodbc 完成。
+
+### 10.2 迁移
+
+- 所有结构性修改必须提交 Alembic migration。
+- 迁移脚本要明确表达结构演进意图。
+- 对历史数据有影响的迁移，需要同时说明兼容策略或数据修复方式。
+
+### 10.3 初始化
+
+- 启动初始化只负责必要的 seed 和健康检查。
+- 不在应用启动阶段偷偷做不可预期的大规模数据修复。
+
+---
+
+## 11. 本地运行
+
+后端目录：`backend/`
+
+常见命令：
+- `alembic upgrade head`
+- `uvicorn app.main:app --reload`
+
+当前本地开发通常运行在：
+- `127.0.0.1:8010`
+
+如果从仓库根或任务系统启动，需要保证 `app.main` 的模块解析路径正确。
+
+---
+
+## 12. 开发约束
+
+### 12.1 分层职责
+
+- 配置读取集中在 `core/config.py`。
+- 安全逻辑集中在 `core/security.py`。
+- 数据模型放在 `models/`。
+- 请求/响应模型放在 `schemas/`。
+- 路由文件负责业务编排与权限边界，不把配置、模型、序列化逻辑混写在一起。
+
+### 12.2 规则落点
+
+- 前端可做体验型校验，但最终规则必须以后端强校验为准。
+- 会影响统计或历史追溯的规则，不允许只存在于前端。
+
+### 12.3 文档
+
+- `docs/backend.md` 只保留总体架构、公共约束、运行方式和开发原则。
+- 具体接口、模块行为和特殊业务规则，应沉淀到专项文档、代码注释或迁移说明中。
+
+---
+
+## 13. 总体维护原则
+
+- 后端总文档只回答“系统怎么组织、规则放在哪一层、如何运行和演进”。
+- 模块细节不再堆进总文档。
+- 当实现与文档冲突时，优先修正为一致；若需要改变公共约束，应先更新本总文档。
 

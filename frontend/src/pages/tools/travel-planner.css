@@ -163,6 +163,13 @@
   align-items: center;
 }
 
+.travelPlanner__summaryContent {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .travelPlanner__summaryText {
   overflow: hidden;
   white-space: nowrap;
@@ -176,6 +183,47 @@
 
 .travelPlanner__summaryText--pm {
   color: var(--app-accent);
+}
+
+.travelPlanner__reservationBadge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(82, 196, 26, 0.28);
+  background: rgba(82, 196, 26, 0.12);
+  color: #389e0d;
+  cursor: pointer;
+}
+
+.travelPlanner__reservationBadge--card {
+  border-color: rgba(82, 196, 26, 0.28);
+  background: rgba(82, 196, 26, 0.12);
+  color: #389e0d;
+}
+
+.travelPlanner__reservationBadge--ticket {
+  border-radius: 8px;
+  border-color: rgba(22, 119, 255, 0.32);
+  background: rgba(22, 119, 255, 0.12);
+  color: #1677ff;
+}
+
+.travelPlanner__reservationBadgeIcon {
+  font-size: 15px;
+}
+
+.travelPlanner__reservationTooltip {
+  display: grid;
+  gap: 2px;
+  line-height: 1.45;
+}
+
+.travelPlanner__reservationTooltipType {
+  font-weight: 600;
 }
 
 .travelPlanner__hint {

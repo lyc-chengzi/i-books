@@ -6,6 +6,7 @@ import { App as AntdApp, ConfigProvider, theme as antdTheme } from 'antd';
 
 import { AuthProvider } from './auth/AuthProvider';
 import { App } from './app/App';
+import { CommuteCardStoreProvider } from './pages/tools/CommuteCardStore';
 import './styles.css';
 
 const queryClient = new QueryClient({
@@ -53,9 +54,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <AntdApp>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
+            <CommuteCardStoreProvider>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </CommuteCardStoreProvider>
           </AuthProvider>
         </QueryClientProvider>
       </AntdApp>

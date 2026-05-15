@@ -1,0 +1,86 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Backend",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8010",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "custom",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Uvicorn running on.*|.*Started server process.*",
+          "endsPattern": ".*Application startup complete.*"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "ibooks-dev"
+      }
+    },
+    {
+      "label": "Stop Backend",
+      "type": "shell",
+      "command": "$conn = Get-NetTCPConnection -LocalPort 8010 -ErrorAction SilentlyContinue; if ($conn) { Stop-Process -Id ($conn | Select-Object -First 1 -ExpandProperty OwningProcess) -Force; Write-Output 'Stopped backend on port 8010.' } else { Write-Output 'No backend process found on port 8010.' }",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "ibooks-dev"
+      }
+    },
+    {
+      "label": "Start Frontend",
+      "type": "shell",
+      "command": "pnpm dev --host 127.0.0.1 --port 5173",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "custom",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*VITE.*|.*Local:.*|.*ready in.*",
+          "endsPattern": ".*Local:.*http://127.0.0.1:5173/.*|.*Local:.*http://localhost:5173/.*"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "ibooks-dev"
+      }
+    },
+    {
+      "label": "Restart Backend",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Stop Backend",
+        "Start Backend"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Frontend + Backend",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "Start Backend",
+        "Start Frontend"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

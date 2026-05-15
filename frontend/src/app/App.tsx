@@ -24,6 +24,8 @@ import { CategoryPage } from '../pages/config/CategoryPage';
 import { UserPage } from '../pages/config/UserPage';
 import { TransactionAuditLogPage } from '../pages/config/TransactionAuditLogPage';
 
+import { BeijingTianjinCommuteCardPage } from '../pages/tools/BeijingTianjinCommuteCardPage';
+import { TicketCommutePage } from '../pages/tools/TicketCommutePage';
 import { TravelPlannerPage } from '../pages/tools/TravelPlannerPage';
 
 export function App() {
@@ -77,6 +79,8 @@ export function App() {
         </Route>
 
         <Route path="tools" element={<ToolsLayout />}>
+          <Route path="commute-cards" element={<BeijingTianjinCommuteCardPage />} />
+          <Route path="ticket-commutes" element={<TicketCommutePage />} />
           <Route path="travel-planner" element={<TravelPlannerPage />} />
         </Route>
       </Route>

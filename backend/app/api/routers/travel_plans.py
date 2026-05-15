@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.models.commute_reservation import CommuteReservation
 from app.models.travel_plan import TravelPlan
 from app.models.user import User
 from app.schemas.travel_plan import TravelPlanDayOut, TravelPlanMonthOut, TravelPlanUpsert
@@ -64,6 +65,16 @@ def upsert_day(
 
     if is_rest_day and (am is not None or pm is not None):
         raise HTTPException(status_code=400, detail="Rest day cannot have plans")
+
+    if is_rest_day:
+        has_reservation = db.scalar(
+            select(CommuteReservation.id).where(
+                CommuteReservation.user_id == current_user.id,
+                CommuteReservation.ride_date == payload.date,
+            )
+        )
+        if has_reservation is not None:
+            raise HTTPException(status_code=400, detail="This date already has commute reservations and cannot be marked as a rest day")
 
     existing = db.scalar(
         select(TravelPlan).where(

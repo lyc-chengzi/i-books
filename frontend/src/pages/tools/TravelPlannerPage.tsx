@@ -1,11 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import { Button, Input, Select, Space, Typography, Badge } from 'antd';
+import { CarryOutFilled, LeftOutlined, RightOutlined, DollarCircleFilled } from '@ant-design/icons';
+import { Button, Input, Select, Space, Tooltip, Typography, Badge, message } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '../../auth/useAuth';
 import { api, getApiErrorMessage } from '../../lib/api';
+import {
+  type CommuteReservation,
+  formatCommuteReservationTime,
+  getCommuteReservationSlot,
+  useCommuteCardStore
+} from './CommuteCardStore';
 
 import './travel-planner.css';
 
@@ -16,6 +22,29 @@ type DayPlan = {
 };
 
 type PlanMap = Record<string, DayPlan>;
+type ReservationMap = Record<string, { am?: CommuteReservation; pm?: CommuteReservation }>;
+
+function getReservationMetaLine(reservation: CommuteReservation) {
+  const parts = [reservation.trainNo, reservation.carriageNo ? `${reservation.carriageNo}车` : null, reservation.seatNo]
+    .filter(Boolean)
+    .map((item) => String(item));
+
+  return parts.length ? parts.join(' · ') : null;
+}
+
+function getReservationSourceMeta(reservation: CommuteReservation) {
+  return reservation.cardId === null
+    ? {
+        label: '购票通勤',
+        badgeClassName: 'travelPlanner__reservationBadge travelPlanner__reservationBadge--ticket',
+        icon: <DollarCircleFilled className="travelPlanner__reservationBadgeIcon" />
+      }
+    : {
+        label: '通勤卡预约',
+        badgeClassName: 'travelPlanner__reservationBadge travelPlanner__reservationBadge--card',
+        icon: <CarryOutFilled className="travelPlanner__reservationBadgeIcon" />
+      };
+}
 
 function buildMonthCells(month: dayjs.Dayjs) {
   const first = month.startOf('month');
@@ -59,6 +88,8 @@ function getTabSuggestedValue(slot: 'am' | 'pm') {
 export function TravelPlannerPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
+  const { reservations } = useCommuteCardStore();
+  const [messageApi, contextHolder] = message.useMessage();
 
   const todayKey = dayjs().format('YYYY-MM-DD');
 
@@ -189,6 +220,20 @@ export function TravelPlannerPage() {
 
   const weekHeaders = ['一', '二', '三', '四', '五', '六', '日'];
 
+  const reservationMap = useMemo<ReservationMap>(() => {
+    const next: ReservationMap = {};
+
+    for (const reservation of reservations) {
+      const slot = getCommuteReservationSlot(reservation.departureTime);
+      next[reservation.rideDate] = {
+        ...(next[reservation.rideDate] ?? {}),
+        [slot]: reservation
+      };
+    }
+
+    return next;
+  }, [reservations]);
+
   const startEditing = (dateKey: string) => {
     const current = plans[dateKey] ?? {};
     if (current.isRestDay) return;
@@ -229,6 +274,15 @@ export function TravelPlannerPage() {
 
     const current = plans[dateKey] ?? {};
     const nextIsRestDay = !current.isRestDay;
+
+    if (nextIsRestDay) {
+      const dateReservations = reservationMap[dateKey];
+      if (dateReservations?.am || dateReservations?.pm) {
+        messageApi.warning('当天已有预约座位，不能设置为休息日');
+        return;
+      }
+    }
+
     const nextPlan: DayPlan = nextIsRestDay
       ? { isRestDay: true, am: undefined, pm: undefined }
       : { ...current, isRestDay: false };
@@ -384,6 +438,7 @@ export function TravelPlannerPage() {
 
   return (
     <div className="travelPlanner">
+      {contextHolder}
       <div className="travelPlanner__header">
         <Space size={10} wrap className="travelPlanner__toolbar">
           <Button type="primary" loading={isArranging} onClick={handleOneClickArrange}>
@@ -451,6 +506,7 @@ export function TravelPlannerPage() {
               const isEditing = editingDateKey === dateKey;
               const isRestDay = !!plan.isRestDay;
               const isDisabled = !inMonth;
+              const slotReservations = reservationMap[dateKey] ?? {};
               const cellWeekIndex = Math.floor(i / 7);
               const isCurrentWeek = currentWeekIndex >= 0 && cellWeekIndex === currentWeekIndex;
 
@@ -554,15 +610,57 @@ export function TravelPlannerPage() {
                         <>
                           <div className="travelPlanner__summaryRow">
                             <Typography.Text type="secondary">上午</Typography.Text>
-                            <Typography.Text className="travelPlanner__summaryText travelPlanner__summaryText--am">
-                              {plan.am || '-'}
-                            </Typography.Text>
+                            <div className="travelPlanner__summaryContent">
+                              <Typography.Text className="travelPlanner__summaryText travelPlanner__summaryText--am">
+                                {plan.am || '-'}
+                              </Typography.Text>
+                              {slotReservations.am ? (
+                                <Tooltip
+                                  title={
+                                    <div className="travelPlanner__reservationTooltip">
+                                      <div className="travelPlanner__reservationTooltipType">
+                                        {getReservationSourceMeta(slotReservations.am).label}
+                                      </div>
+                                      <div>{`${slotReservations.am.direction} ${formatCommuteReservationTime(slotReservations.am.departureTime)}`}</div>
+                                      {getReservationMetaLine(slotReservations.am) ? (
+                                        <div>{getReservationMetaLine(slotReservations.am)}</div>
+                                      ) : null}
+                                    </div>
+                                  }
+                                >
+                                  <span className={getReservationSourceMeta(slotReservations.am).badgeClassName}>
+                                    {getReservationSourceMeta(slotReservations.am).icon}
+                                  </span>
+                                </Tooltip>
+                              ) : null}
+                            </div>
                           </div>
                           <div className="travelPlanner__summaryRow">
                             <Typography.Text type="secondary">下午</Typography.Text>
-                            <Typography.Text className="travelPlanner__summaryText travelPlanner__summaryText--pm">
-                              {plan.pm || '-'}
-                            </Typography.Text>
+                            <div className="travelPlanner__summaryContent">
+                              <Typography.Text className="travelPlanner__summaryText travelPlanner__summaryText--pm">
+                                {plan.pm || '-'}
+                              </Typography.Text>
+                              {slotReservations.pm ? (
+                                <Tooltip
+                                  title={
+                                    <div className="travelPlanner__reservationTooltip">
+                                      <div className="travelPlanner__reservationTooltipType">
+                                        {getReservationSourceMeta(slotReservations.pm).label}
+                                      </div>
+                                      <div>{`${slotReservations.pm.direction} ${formatCommuteReservationTime(slotReservations.pm.departureTime)}`}</div>
+                                      {getReservationMetaLine(slotReservations.pm) ? (
+                                        <div>{getReservationMetaLine(slotReservations.pm)}</div>
+                                      ) : null}
+                                    </div>
+                                  }
+                                >
+                                  <span className={getReservationSourceMeta(slotReservations.pm).badgeClassName}>
+                                    {getReservationSourceMeta(slotReservations.pm).icon}
+                                  </span>
+                                </Tooltip>
+                              ) : null}
+                            </div>
                           </div>
                         </>
                       )}
@@ -588,7 +686,7 @@ export function TravelPlannerPage() {
       </div>
 
       <Typography.Text type="secondary" className="travelPlanner__hint">
-        双击某一天，填写上午/下午行程（Tab 可按模板自动补全，ESC 退出编辑）；右键切换休息日
+        双击某一天，填写上午/下午行程（Tab 可按模板自动补全，ESC 退出编辑）；右键切换休息日。已有预约的日期不能设为休息日
       </Typography.Text>
     </div>
   );
