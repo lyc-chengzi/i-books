@@ -90,12 +90,12 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   const [bankAccountFilter, setBankAccountFilter] = useState<BankAccountFilter>('all');
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([dayjs().startOf('month'), dayjs().endOf('month')]);
   const [keyword, setKeyword] = useState('');
-  const [occurredAtSort, setOccurredAtSort] = useState<OccurredAtSort>('asc');
+  const [occurredAtSort, setOccurredAtSort] = useState<OccurredAtSort>('desc');
 
   const [groupByDate, setGroupByDate] = useState(true);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(100);
 
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [flashRowId, setFlashRowId] = useState<number | null>(null);
@@ -621,7 +621,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
               title: '发生时间',
               key: 'occurredAt',
               dataIndex: 'occurredAt',
-              width: 200,
+              width: 130,
               fixed: 'left',
               sorter: true,
               sortDirections: ['descend', 'ascend', 'descend'],
@@ -651,7 +651,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             },
             {
               title: '项目',
-              width: 130,
+              width: 100,
               fixed: 'left',
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
@@ -674,7 +674,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '金额',
               dataIndex: 'amountCents',
-              width: 200,
+              width: 150,
               fixed: 'left',
               render: (_v: unknown, row: TableRow) => {
                 if (isGroupRow(row)) {
@@ -698,7 +698,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '来源',
               dataIndex: 'fundingSource',
-              width: 150,
+              width: 120,
               render: (v, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
                 if (row.type === 'transfer') return '转账';
@@ -708,7 +708,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             },
             {
               title: '账户',
-              width: 220,
+              width: 150,
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
                 if (row.type === 'transfer') {
@@ -740,7 +740,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             {
               title: '备注',
               dataIndex: 'note',
-              width: 200,
+              width: 160,
               render: (_v: unknown, row: TableRow) => {
                 if (isGroupRow(row)) return '-';
                 const note = row.note?.trim() ?? '';
@@ -770,7 +770,7 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
             },
             {
               title: '操作',
-              width: 220,
+              width: 130,
               fixed: 'right',
               render: (_: any, row: TableRow) => {
                 if (isGroupRow(row)) return null;
