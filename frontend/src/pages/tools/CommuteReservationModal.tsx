@@ -1,4 +1,4 @@
-import { DatePicker, Input, Modal, Select, TimePicker, Typography } from 'antd';
+import { AutoComplete, DatePicker, Modal, Radio, Select, TimePicker, Typography } from 'antd';
 import dayjs from 'dayjs';
 
 import { type Direction } from './CommuteCardStore';
@@ -9,13 +9,31 @@ export type ReservationDraft = {
   trainNo: string;
   direction: Direction | null;
   carriageNo: string;
-  seatNo: string;
+  seatNumber: string;
+  seatLetter: string;
 };
 
 const DIRECTION_OPTIONS: Array<{ label: Direction; value: Direction }> = [
   { label: '北京南-天津', value: '北京南-天津' },
   { label: '天津-北京南', value: '天津-北京南' }
 ];
+
+const TRAIN_OPTIONS: Record<Direction, string[]> = {
+  '天津-北京南': ['C2204', 'G8952', 'C2552', 'C2002', 'C2554', 'C2004', 'C2206', 'C2208'],
+  '北京南-天津': ['C2593', 'C2595', 'C2265', 'C2267', 'C2597']
+};
+
+const CARRIAGE_OPTIONS = Array.from({ length: 16 }, (_, index) => {
+  const value = String(index + 1);
+  return { label: `${value} 车`, value };
+});
+
+const SEAT_NUMBER_OPTIONS = Array.from({ length: 20 }, (_, index) => {
+  const value = String(index + 1);
+  return { label: value, value };
+});
+
+const SEAT_LETTER_OPTIONS = ['A', 'B', 'C', 'D', 'F'].map((value) => ({ label: value, value }));
 
 export function toTimeValue(timeLike: string) {
   const [hour, minute] = timeLike.split(':').map(Number);
@@ -26,6 +44,27 @@ export function getDefaultDepartureTime(direction: Direction) {
   return direction === '北京南-天津' ? '19:10' : '06:39';
 }
 
+function parseSeatNo(seatNo: string) {
+  const normalized = seatNo.trim().toUpperCase();
+  const match = normalized.match(/^(\d{1,2})([ABCDF])$/);
+  if (!match) {
+    return { seatNumber: undefined, seatLetter: undefined };
+  }
+
+  return {
+    seatNumber: match[1],
+    seatLetter: match[2]
+  };
+}
+
+export function composeSeatNo(seatNumber?: string, seatLetter?: string) {
+  if (!seatNumber || !seatLetter) {
+    return '';
+  }
+
+  return `${seatNumber}${seatLetter}`;
+}
+
 export function createReservationDraft(direction: Direction, rideDate?: dayjs.Dayjs | null): ReservationDraft {
   return {
     rideDate: rideDate ?? dayjs(),
@@ -33,7 +72,8 @@ export function createReservationDraft(direction: Direction, rideDate?: dayjs.Da
     trainNo: '',
     direction,
     carriageNo: '',
-    seatNo: ''
+    seatNumber: '',
+    seatLetter: 'F'
   };
 }
 
@@ -45,13 +85,16 @@ export function reservationToDraft(input: {
   carriageNo?: string;
   seatNo?: string;
 }): ReservationDraft {
+  const parsedSeat = parseSeatNo(input.seatNo ?? '');
+
   return {
     rideDate: dayjs(input.rideDate),
     departureTime: toTimeValue(input.departureTime),
     trainNo: input.trainNo ?? '',
     direction: input.direction,
     carriageNo: input.carriageNo ?? '',
-    seatNo: input.seatNo ?? ''
+    seatNumber: parsedSeat.seatNumber ?? '',
+    seatLetter: parsedSeat.seatLetter ?? 'F'
   };
 }
 
@@ -74,6 +117,7 @@ export function CommuteReservationModal(props: {
   onDraftChange: (updater: (current: ReservationDraft) => ReservationDraft) => void;
 }) {
   const { title, open, okText, draft, onCancel, onOk, onDraftChange } = props;
+  const trainOptions = draft.direction ? TRAIN_OPTIONS[draft.direction].map((value) => ({ value })) : [];
 
   return (
     <Modal title={title} open={open} onCancel={onCancel} onOk={onOk} okText={okText} cancelText="取消">
@@ -126,14 +170,20 @@ export function CommuteReservationModal(props: {
         <div className="commuteModalForm__triplet">
           <div>
             <Typography.Text strong>车次</Typography.Text>
-            <Input
+            <AutoComplete
               className="commuteModalForm__control"
-              placeholder="例如 G2004"
+              placeholder="可选择预置车次，也可手动输入"
+              options={trainOptions}
               value={draft.trainNo}
-              onChange={(event) =>
+              filterOption={(inputValue, option) =>
+                String(option?.value ?? '')
+                  .toUpperCase()
+                  .includes(inputValue.toUpperCase())
+              }
+              onChange={(value) =>
                 onDraftChange((current) => ({
                   ...current,
-                  trainNo: event.target.value.toUpperCase()
+                  trainNo: String(value).toUpperCase()
                 }))
               }
             />
@@ -141,32 +191,57 @@ export function CommuteReservationModal(props: {
 
           <div>
             <Typography.Text strong>车厢</Typography.Text>
-            <Input
+            <Select
               className="commuteModalForm__control"
-              placeholder="例如 6"
-              value={draft.carriageNo}
-              onChange={(event) =>
+              allowClear
+              placeholder="选择车厢"
+              options={CARRIAGE_OPTIONS}
+              value={draft.carriageNo || undefined}
+              onChange={(value) =>
                 onDraftChange((current) => ({
                   ...current,
-                  carriageNo: event.target.value
+                  carriageNo: value ?? ''
                 }))
               }
             />
           </div>
+        </div>
 
-          <div>
-            <Typography.Text strong>座位号</Typography.Text>
-            <Input
+        <div>
+          <Typography.Text strong>座位号</Typography.Text>
+          <Typography.Text type="secondary" className="commuteModalForm__seatHint">
+            通过座位排号和字母组合选择
+          </Typography.Text>
+
+          <div className="commuteModalForm__seatRow">
+            <Select
               className="commuteModalForm__control"
-              placeholder="例如 1D"
-              value={draft.seatNo}
-              onChange={(event) =>
+              allowClear
+              placeholder="座位排号"
+              options={SEAT_NUMBER_OPTIONS}
+              value={draft.seatNumber || undefined}
+              onChange={(value) =>
                 onDraftChange((current) => ({
                   ...current,
-                  seatNo: event.target.value.toUpperCase()
+                  seatNumber: value ?? ''
                 }))
               }
             />
+
+            <Radio.Group
+              className="commuteModalForm__seatLetters"
+              optionType="button"
+              buttonStyle="solid"
+              options={SEAT_LETTER_OPTIONS}
+              value={draft.seatLetter}
+              onChange={(value) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  seatLetter: String(value.target.value)
+                }))
+              }
+            />
+
           </div>
         </div>
 

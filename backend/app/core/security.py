@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt
@@ -25,8 +26,24 @@ def create_access_token(subject: str) -> str:
     return jwt.encode(to_encode, settings.jwt_secret, algorithm="HS256")
 
 
+def decode_access_token_claims(token: str) -> dict[str, Any]:
+    return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+
+
+def get_access_token_expire_at(token: str) -> datetime:
+    payload = decode_access_token_claims(token)
+    exp = payload.get("exp")
+    if isinstance(exp, datetime):
+        if exp.tzinfo is None:
+            return exp.replace(tzinfo=timezone.utc)
+        return exp.astimezone(timezone.utc)
+    if isinstance(exp, (int, float)):
+        return datetime.fromtimestamp(exp, tz=timezone.utc)
+    raise ValueError("Missing exp")
+
+
 def decode_access_token(token: str) -> str:
-    payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    payload = decode_access_token_claims(token)
     sub = payload.get("sub")
     if not sub:
         raise ValueError("Missing sub")

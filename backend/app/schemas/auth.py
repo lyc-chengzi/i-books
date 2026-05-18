@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -10,6 +12,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    access_token_expires_at: datetime
 
 
 class RegisterRequest(BaseModel):
@@ -21,3 +24,7 @@ class UserMe(BaseModel):
     id: int
     username: str
     role: str
+
+
+class SessionMe(UserMe):
+    access_token_expires_at: datetime

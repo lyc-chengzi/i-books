@@ -2,7 +2,13 @@ import { ofetch, type FetchOptions } from 'ofetch';
 
 type ExtraOptions = {
   token?: string | null;
+  skipAuthHandling?: boolean;
 };
+
+type AuthExpiredListener = () => void;
+
+const authExpiredListeners = new Set<AuthExpiredListener>();
+let lastAuthExpiredAt = 0;
 
 const client = ofetch.create({
   baseURL: '/api',
@@ -19,19 +25,53 @@ function withAuth(options?: (FetchOptions<'json'> & ExtraOptions) | undefined) {
   return { ...options, headers } as FetchOptions<'json'>;
 }
 
+function getErrorStatus(err: unknown): number | undefined {
+  const anyErr = err as any;
+  return (
+    (typeof anyErr?.status === 'number' ? anyErr.status : undefined) ??
+    (typeof anyErr?.response?.status === 'number' ? anyErr.response.status : undefined)
+  );
+}
+
+function notifyAuthExpired() {
+  const now = Date.now();
+  if (now - lastAuthExpiredAt < 1000) return;
+  lastAuthExpiredAt = now;
+  authExpiredListeners.forEach((listener) => listener());
+}
+
+async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: any, options?: FetchOptions<'json'> & ExtraOptions) {
+  try {
+    return await client<T>(path, { ...withAuth(options), method, body });
+  } catch (err) {
+    const status = getErrorStatus(err);
+    if (!options?.skipAuthHandling && (status === 401 || status === 403)) {
+      notifyAuthExpired();
+    }
+    throw err;
+  }
+}
+
+export function subscribeAuthExpired(listener: AuthExpiredListener) {
+  authExpiredListeners.add(listener);
+  return () => {
+    authExpiredListeners.delete(listener);
+  };
+}
+
 export const api = {
   get: <T>(path: string, options?: FetchOptions<'json'> & ExtraOptions) =>
-    client<T>(path, { ...withAuth(options), method: 'GET' }),
+    request<T>(path, 'GET', undefined, options),
   post: <T>(path: string, body?: any, options?: FetchOptions<'json'> & ExtraOptions) =>
-    client<T>(path, { ...withAuth(options), method: 'POST', body }),
+    request<T>(path, 'POST', body, options),
   patch: <T>(path: string, body?: any, options?: FetchOptions<'json'> & ExtraOptions) =>
-    client<T>(path, { ...withAuth(options), method: 'PATCH', body }),
+    request<T>(path, 'PATCH', body, options),
   put: <T>(path: string, body?: any, options?: FetchOptions<'json'> & ExtraOptions) =>
-    client<T>(path, { ...withAuth(options), method: 'PUT', body }),
+    request<T>(path, 'PUT', body, options),
   del: <T>(path: string, options?: FetchOptions<'json'> & ExtraOptions) =>
-    client<T>(path, { ...withAuth(options), method: 'DELETE' }),
+    request<T>(path, 'DELETE', undefined, options),
   delete: <T>(path: string, options?: FetchOptions<'json'> & ExtraOptions) =>
-    client<T>(path, { ...withAuth(options), method: 'DELETE' })
+    request<T>(path, 'DELETE', undefined, options)
 };
 
 function normalizeFastApiDetail(detail: unknown): string | null {
@@ -65,9 +105,7 @@ export function getApiErrorMessage(err: unknown): string {
   if (typeof err === 'string') return err;
 
   const anyErr = err as any;
-  const status: number | undefined =
-    (typeof anyErr?.status === 'number' ? anyErr.status : undefined) ??
-    (typeof anyErr?.response?.status === 'number' ? anyErr.response.status : undefined);
+  const status = getErrorStatus(err);
 
   if (status === 401 || status === 403) return '登录已过期或无权限，请重新登录';
 

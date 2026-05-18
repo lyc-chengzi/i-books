@@ -165,17 +165,74 @@
 
 .commuteReservationList {
   display: grid;
+  gap: 14px;
+}
+
+.reservationGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.reservationGroup__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  padding-bottom: 2px;
+}
+
+.reservationGroup__titleWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reservationGroup__title {
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.reservationGroup__hint {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--app-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.reservationGroup__count {
+  font-size: 12px;
+}
+
+.reservationGroup__list {
+  display: grid;
+  gap: 10px;
 }
 
 .reservationListItem {
-  padding: 14px 0;
-  border-top: 1px solid rgba(5, 5, 5, 0.06);
+  padding: 12px 14px;
+  border: 1px solid rgba(5, 5, 5, 0.06);
+  border-left-width: 5px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
 }
 
 .reservationListItem:first-child {
-  border-top: 0;
-  padding-top: 0;
+  padding-top: 12px;
+}
+
+.reservationListItem--upcoming {
+  border-left-color: #d4380d;
+  background: linear-gradient(90deg, rgba(255, 244, 230, 0.88), rgba(255, 255, 255, 0.96) 22%);
+}
+
+.reservationListItem--completed {
+  border-left-color: #389e0d;
+  background: linear-gradient(90deg, rgba(246, 255, 237, 0.92), rgba(255, 255, 255, 0.96) 22%);
 }
 
 .reservationRow {
@@ -183,42 +240,91 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
+}
+
+.reservationRow__index {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--app-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .reservationRow__main {
   min-width: 0;
+  flex: 1 1 auto;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .reservationRow__headline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.reservationRow__statusText {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .reservationRow__time {
   font-size: 16px;
+  font-weight: 600;
+}
+
+.reservationListItem--upcoming .reservationRow__statusText {
+  color: #d4380d;
+}
+
+.reservationListItem--completed .reservationRow__statusText {
+  color: #389e0d;
+}
+
+.reservationListItem--upcoming .reservationRow__index {
+  background: rgba(212, 56, 13, 0.12);
+  color: #d4380d;
+}
+
+.reservationListItem--completed .reservationRow__index {
+  background: rgba(56, 158, 13, 0.12);
+  color: #389e0d;
 }
 
 .reservationRow__tags {
   min-width: 0;
 }
 
+.reservationRow__tags.ant-space {
+  gap: 6px 6px !important;
+}
+
+.reservationRow__tags .ant-tag {
+  margin-inline-end: 0;
+  margin-bottom: 0;
+}
+
 .reservationRow__side {
   flex: none;
   display: grid;
   justify-items: end;
-  gap: 8px;
+  gap: 6px;
 }
 
 .reservationRow__meta {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--app-text-secondary);
   font-size: 12px;
 }
@@ -257,6 +363,30 @@
   gap: 12px;
 }
 
+.commuteModalForm__seatHint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.commuteModalForm__seatRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.commuteModalForm__seatLetters {
+  margin-top: 6px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.commuteModalForm__seatLetters .ant-radio-button-wrapper {
+  min-width: 44px;
+  text-align: center;
+}
+
 @media (max-width: 900px) {
   .commuteCardPage__toolbar {
     flex-direction: column;
@@ -265,10 +395,16 @@
 }
 
 @media (max-width: 760px) {
+  .reservationGroup__header,
   .commuteDrawer__listHeader,
   .reservationRow {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .reservationRow__index {
+    width: 24px;
+    height: 24px;
   }
 
   .reservationRow__side {
@@ -281,6 +417,10 @@
   }
 
   .commuteModalForm__triplet {
+    grid-template-columns: 1fr;
+  }
+
+  .commuteModalForm__seatRow {
     grid-template-columns: 1fr;
   }
 }

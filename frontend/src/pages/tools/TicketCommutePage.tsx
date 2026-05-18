@@ -18,6 +18,7 @@ import {
 } from './CommuteCardStore';
 import {
   CommuteReservationModal,
+  composeSeatNo,
   createReservationDraft,
   type ReservationDraft,
   reservationToDraft
@@ -89,11 +90,13 @@ export function TicketCommutePage() {
   };
 
   const submitReservation = async () => {
-    const { rideDate, departureTime, trainNo, direction, carriageNo, seatNo } = reservationDraft;
+    const { rideDate, departureTime, trainNo, direction, carriageNo, seatNumber, seatLetter } = reservationDraft;
     if (!rideDate || !departureTime || !direction) {
       messageApi.error('请完整填写乘车方向、乘车日期和车次时间');
       return;
     }
+
+    const seatNo = composeSeatNo(seatNumber.trim() || undefined, seatLetter);
 
     const normalizedRideDate = rideDate.format('YYYY-MM-DD');
     const normalizedDepartureTime = departureTime.format('HH:mm');

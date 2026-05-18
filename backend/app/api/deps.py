@@ -20,20 +20,24 @@ def get_db() -> Session:
         db.close()
 
 
-def get_current_user(
+def get_request_token(
     request: Request,
     cred: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> str:
+    if cred and cred.credentials:
+        return cred.credentials
+
+    token = request.cookies.get(settings.auth_cookie_name)
+    if token:
+        return token
+
+    raise HTTPException(status_code=401, detail="Not authenticated")
+
+
+def get_current_user(
+    token: str = Depends(get_request_token),
     db: Session = Depends(get_db),
 ) -> User:
-    token: str | None = None
-    if cred and cred.credentials:
-        token = cred.credentials
-    else:
-        token = request.cookies.get(settings.auth_cookie_name)
-
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     try:
         user_id = int(decode_access_token(token))
     except Exception:
