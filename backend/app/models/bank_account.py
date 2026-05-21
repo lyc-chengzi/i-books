@@ -24,4 +24,7 @@ class BankAccount(Base):
     billing_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     repayment_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

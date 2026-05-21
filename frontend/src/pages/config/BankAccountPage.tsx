@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntdApp, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Switch, Table } from 'antd';
-import { useMemo, useState } from 'react';
+import { PushpinFilled } from '@ant-design/icons';
+import { App as AntdApp, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../../auth/useAuth';
 import { api } from '../../lib/api';
@@ -14,6 +15,8 @@ type BankAccount = {
   balanceCents: number;
   billingDay: number | null;
   repaymentDay: number | null;
+  sortOrder: number;
+  isPinned: boolean;
   isActive: boolean;
 };
 
@@ -37,13 +40,21 @@ export function BankAccountPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<BankAccount | null>(null);
+  const [rows, setRows] = useState<BankAccount[]>([]);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<'before' | 'after'>('after');
 
   const [editForm] = Form.useForm<UpdateValues>();
 
   const listQuery = useQuery({
-    queryKey: ['bankAccounts', 'usage'],
-    queryFn: () => api.get<BankAccount[]>('/config/bank-accounts?orderBy=usage', { token: auth.token })
+    queryKey: ['bankAccounts', 'ordered'],
+    queryFn: () => api.get<BankAccount[]>('/config/bank-accounts', { token: auth.token })
   });
+
+  useEffect(() => {
+    setRows(listQuery.data ?? []);
+  }, [listQuery.data]);
 
   const createMutation = useMutation({
     mutationFn: (payload: any) => api.post<BankAccount>('/config/bank-accounts', payload, { token: auth.token }),
@@ -63,6 +74,26 @@ export function BankAccountPage() {
     }
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: (ids: number[]) => api.post<{ ok: boolean }>('/config/bank-accounts/reorder', { ids }, { token: auth.token }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['bankAccounts'] });
+    },
+    onError: () => {
+      message.error('排序保存失败，已刷新列表');
+      queryClient.invalidateQueries({ queryKey: ['bankAccounts'] });
+    }
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: ({ id, isPinned }: { id: number; isPinned: boolean }) =>
+      api.post<BankAccount>(`/config/bank-accounts/${id}/${isPinned ? 'unpin' : 'pin'}`, {}, { token: auth.token }),
+    onSuccess: async () => {
+      message.success('排序已更新');
+      await queryClient.invalidateQueries({ queryKey: ['bankAccounts'] });
+    }
+  });
+
   const kindOptions = useMemo(
     () => [
       { value: 'debit', label: '储蓄卡/借记卡' },
@@ -70,6 +101,25 @@ export function BankAccountPage() {
     ],
     []
   );
+
+  const moveRow = (sourceId: number, targetId: number, position: 'before' | 'after') => {
+    if (sourceId === targetId) return;
+    const sourceIndex = rows.findIndex((r) => r.id === sourceId);
+    const targetIndex = rows.findIndex((r) => r.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const next = [...rows];
+    const [moved] = next.splice(sourceIndex, 1);
+    let insertIndex = targetIndex;
+    if (sourceIndex < targetIndex) {
+      insertIndex = position === 'before' ? targetIndex - 1 : targetIndex;
+    } else {
+      insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+    }
+    next.splice(Math.max(0, insertIndex), 0, moved);
+    setRows(next);
+    reorderMutation.mutate(next.map((r) => r.id));
+  };
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -132,15 +182,76 @@ export function BankAccountPage() {
       </Card>
 
       <Card title="银行账户列表">
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+          按住行并拖动可调整顺序，蓝色提示线表示放置位置。
+        </Typography.Text>
         <Table
           rowKey="id"
           loading={listQuery.isLoading}
-          dataSource={listQuery.data ?? []}
+          dataSource={rows}
+          rowClassName={(record) => {
+            if (draggingId === record.id) return 'bank-row-dragging';
+            if (dropTargetId === record.id) return 'bank-row-drop-target';
+            return '';
+          }}
+          onRow={(record) => ({
+            draggable: !reorderMutation.isPending,
+            onDragStart: (event) => {
+              event.dataTransfer.effectAllowed = 'move';
+              setDraggingId(record.id);
+            },
+            onDragOver: (event) => {
+              event.preventDefault();
+              if (draggingId === record.id) return;
+              const bounds = event.currentTarget.getBoundingClientRect();
+              const isBefore = event.clientY - bounds.top < bounds.height / 2;
+              setDropTargetId(record.id);
+              setDropPosition(isBefore ? 'before' : 'after');
+            },
+            onDrop: () => {
+              if (draggingId !== null) {
+                moveRow(draggingId, record.id, dropPosition);
+              }
+              setDraggingId(null);
+              setDropTargetId(null);
+            },
+            onDragEnd: () => {
+              setDraggingId(null);
+              setDropTargetId(null);
+            },
+            style: {
+              cursor: reorderMutation.isPending ? 'not-allowed' : 'grab',
+              opacity: draggingId === record.id ? 0.55 : 1,
+              backgroundColor: dropTargetId === record.id ? '#f0f8ff' : undefined,
+              borderTop: dropTargetId === record.id && dropPosition === 'before' ? '2px solid #1677ff' : undefined,
+              borderBottom: dropTargetId === record.id && dropPosition === 'after' ? '2px solid #1677ff' : undefined,
+              transition: 'background-color 0.2s ease, opacity 0.2s ease'
+            }
+          })}
           columns={[
+            {
+              title: '排序',
+              width: 96,
+              render: (_: any, row: BankAccount, index: number) => (
+                <Space size={8}>
+                  <span style={{ color: '#999', letterSpacing: 1 }}>::</span>
+                  <span>{index + 1}</span>
+                </Space>
+              )
+            },
             {
               title: '银行',
               dataIndex: 'bankName',
-              render: (v: string) => <span style={{ fontWeight: 600 }}>{v}</span>
+              render: (v: string, row: BankAccount) => (
+                <Space size={8}>
+                  {row.isPinned ? (
+                    <Tag color="gold" className="bankPinnedTag" icon={<PushpinFilled />}>
+                      置顶
+                    </Tag>
+                  ) : null}
+                  <span style={{ fontWeight: 600 }}>{v}</span>
+                </Space>
+              )
             },
             { title: '别名', dataIndex: 'alias' },
             { title: '后四位', dataIndex: 'last4', render: (v) => v ?? '-' },
@@ -163,25 +274,36 @@ export function BankAccountPage() {
             {
               title: '操作',
               render: (_: any, row: BankAccount) => (
-                <Button
-                  size="small"
-                  onClick={() => {
-                    setEditing(row);
-                    editForm.setFieldsValue({
-                      bankName: row.bankName,
-                      alias: row.alias,
-                      last4: row.last4 ?? undefined,
-                      kind: row.kind,
-                      balance: (row.balanceCents ?? 0) / 100,
-                      billingDay: row.billingDay ?? undefined,
-                      repaymentDay: row.repaymentDay ?? undefined,
-                      isActive: row.isActive
-                    });
-                    setEditOpen(true);
-                  }}
-                >
-                  编辑
-                </Button>
+                <Space>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      pinMutation.mutate({ id: row.id, isPinned: row.isPinned });
+                    }}
+                    loading={pinMutation.isPending}
+                  >
+                    {row.isPinned ? '取消置顶' : '置顶'}
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setEditing(row);
+                      editForm.setFieldsValue({
+                        bankName: row.bankName,
+                        alias: row.alias,
+                        last4: row.last4 ?? undefined,
+                        kind: row.kind,
+                        balance: (row.balanceCents ?? 0) / 100,
+                        billingDay: row.billingDay ?? undefined,
+                        repaymentDay: row.repaymentDay ?? undefined,
+                        isActive: row.isActive
+                      });
+                      setEditOpen(true);
+                    }}
+                  >
+                    编辑
+                  </Button>
+                </Space>
               )
             }
           ]}

@@ -37,4 +37,10 @@ class BankAccountOut(BaseModel):
     balanceCents: int
     billingDay: int | None
     repaymentDay: int | None
+    sortOrder: int
+    isPinned: bool
     isActive: bool
+
+
+class BankAccountReorderRequest(BaseModel):
+    ids: list[int] = Field(min_length=1)

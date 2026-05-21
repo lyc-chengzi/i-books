@@ -143,8 +143,8 @@ export function TransactionCreatePage() {
   const selectedCategoryId = Form.useWatch('categoryId', form);
 
   const bankQuery = useQuery({
-    queryKey: ['bankAccounts', 'usage'],
-    queryFn: () => api.get<BankAccount[]>('/config/bank-accounts?orderBy=usage', { token: auth.token })
+    queryKey: ['bankAccounts', 'ordered'],
+    queryFn: () => api.get<BankAccount[]>('/config/bank-accounts', { token: auth.token })
   });
 
 

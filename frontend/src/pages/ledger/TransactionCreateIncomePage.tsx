@@ -48,8 +48,8 @@ export function TransactionCreateIncomePage() {
   const [form] = Form.useForm<FormValues>();
 
   const bankQuery = useQuery({
-    queryKey: ['bankAccounts', 'usage'],
-    queryFn: () => api.get<BankAccount[]>('/config/bank-accounts?orderBy=usage', { token: auth.token })
+    queryKey: ['bankAccounts', 'ordered'],
+    queryFn: () => api.get<BankAccount[]>('/config/bank-accounts', { token: auth.token })
   });
 
   const copyDraftQuery = useQuery({

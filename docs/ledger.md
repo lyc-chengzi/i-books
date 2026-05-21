@@ -148,7 +148,7 @@ UI 体现：
 
 常见 queryKey：
 - `['transactions', { filters... }]`
-- `['bankAccounts', 'usage']`
+- `['bankAccounts', 'ordered']`
 - `['categoriesTree', type]`
 
 写操作后通常会触发：

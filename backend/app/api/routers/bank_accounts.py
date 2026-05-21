@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select, union_all
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.models.bank_account import BankAccount
-from app.models.transaction import Transaction
 from app.models.user import User
-from app.schemas.bank_account import BankAccountCreate, BankAccountOut, BankAccountUpdate
+from app.schemas.bank_account import (
+    BankAccountCreate,
+    BankAccountOut,
+    BankAccountReorderRequest,
+    BankAccountUpdate,
+)
 
 router = APIRouter(prefix="/config/bank-accounts", tags=["config"])
 
@@ -35,35 +39,10 @@ def list_bank_accounts(
 ) -> list[BankAccountOut]:
     base = select(BankAccount).where(BankAccount.user_id == current_user.id)
 
-    if orderBy == "usage":
-        usage_source = union_all(
-            select(Transaction.bank_account_id.label("bank_account_id")).where(
-                Transaction.user_id == current_user.id,
-                Transaction.funding_source == "bank",
-                Transaction.bank_account_id.is_not(None),
-            ),
-            select(Transaction.to_bank_account_id.label("bank_account_id")).where(
-                Transaction.user_id == current_user.id,
-                Transaction.funding_source == "bank",
-                Transaction.to_bank_account_id.is_not(None),
-            ),
-        ).subquery()
-
-        usage_counts = (
-            select(
-                usage_source.c.bank_account_id.label("bank_account_id"),
-                func.count().label("usage_count"),
-            )
-            .group_by(usage_source.c.bank_account_id)
-            .subquery()
-        )
-
-        query = (
-            base.outerjoin(usage_counts, usage_counts.c.bank_account_id == BankAccount.id)
-            .order_by(func.coalesce(usage_counts.c.usage_count, 0).desc(), BankAccount.id.desc())
-        )
-    else:
-        query = base.order_by(BankAccount.id.desc())
+    # `orderBy` is kept for backward compatibility. Bank account lists now always
+    # follow user-defined order with pinned accounts first.
+    _ = orderBy
+    query = base.order_by(BankAccount.is_pinned.desc(), BankAccount.sort_order.asc(), BankAccount.id.desc())
 
     rows = db.scalars(query).all()
     return [
@@ -76,6 +55,8 @@ def list_bank_accounts(
             balanceCents=r.balance_cents,
             billingDay=r.billing_day,
             repaymentDay=r.repayment_day,
+            sortOrder=r.sort_order,
+            isPinned=r.is_pinned,
             isActive=r.is_active,
         )
         for r in rows
@@ -90,6 +71,9 @@ def create_bank_account(
 ) -> BankAccountOut:
     _validate_bank_account_fields(kind=payload.kind, billing_day=payload.billingDay, repayment_day=payload.repaymentDay)
 
+    max_sort_order = db.scalar(select(func.max(BankAccount.sort_order)).where(BankAccount.user_id == current_user.id))
+    next_sort_order = (max_sort_order if max_sort_order is not None else -1) + 1
+
     row = BankAccount(
         user_id=current_user.id,
         bank_name=payload.bankName,
@@ -99,6 +83,8 @@ def create_bank_account(
         balance_cents=payload.balanceCents,
         billing_day=payload.billingDay,
         repayment_day=payload.repaymentDay,
+        sort_order=next_sort_order,
+        is_pinned=False,
         is_active=payload.isActive,
     )
     db.add(row)
@@ -114,6 +100,8 @@ def create_bank_account(
         balanceCents=row.balance_cents,
         billingDay=row.billing_day,
         repaymentDay=row.repayment_day,
+        sortOrder=row.sort_order,
+        isPinned=row.is_pinned,
         isActive=row.is_active,
     )
 
@@ -171,5 +159,96 @@ def update_bank_account(
         balanceCents=row.balance_cents,
         billingDay=row.billing_day,
         repaymentDay=row.repayment_day,
+        sortOrder=row.sort_order,
+        isPinned=row.is_pinned,
+        isActive=row.is_active,
+    )
+
+
+@router.post("/reorder")
+def reorder_bank_accounts(
+    payload: BankAccountReorderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, bool]:
+    rows = db.scalars(select(BankAccount).where(BankAccount.user_id == current_user.id)).all()
+    all_ids = [r.id for r in rows]
+    payload_ids = payload.ids
+
+    if len(set(payload_ids)) != len(payload_ids):
+        raise HTTPException(status_code=400, detail="Duplicate ids in reorder payload")
+
+    if set(payload_ids) != set(all_ids):
+        raise HTTPException(status_code=400, detail="Reorder payload must include all bank account ids")
+
+    order_map = {account_id: idx for idx, account_id in enumerate(payload_ids)}
+    for row in rows:
+        row.sort_order = order_map[row.id]
+        db.add(row)
+
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/{bank_account_id}/pin", response_model=BankAccountOut)
+def pin_bank_account(
+    bank_account_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BankAccountOut:
+    row = db.get(BankAccount, bank_account_id)
+    if not row or row.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Bank account not found")
+
+    min_sort_order = db.scalar(select(func.min(BankAccount.sort_order)).where(BankAccount.user_id == current_user.id))
+    row.sort_order = (min_sort_order if min_sort_order is not None else 0) - 1
+    row.is_pinned = True
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    return BankAccountOut(
+        id=row.id,
+        bankName=row.bank_name,
+        alias=row.alias,
+        last4=row.last4,
+        kind=row.kind,
+        balanceCents=row.balance_cents,
+        billingDay=row.billing_day,
+        repaymentDay=row.repayment_day,
+        sortOrder=row.sort_order,
+        isPinned=row.is_pinned,
+        isActive=row.is_active,
+    )
+
+
+@router.post("/{bank_account_id}/unpin", response_model=BankAccountOut)
+def unpin_bank_account(
+    bank_account_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BankAccountOut:
+    row = db.get(BankAccount, bank_account_id)
+    if not row or row.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Bank account not found")
+
+    max_sort_order = db.scalar(select(func.max(BankAccount.sort_order)).where(BankAccount.user_id == current_user.id))
+    row.sort_order = (max_sort_order if max_sort_order is not None else -1) + 1
+    row.is_pinned = False
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    return BankAccountOut(
+        id=row.id,
+        bankName=row.bank_name,
+        alias=row.alias,
+        last4=row.last4,
+        kind=row.kind,
+        balanceCents=row.balance_cents,
+        billingDay=row.billing_day,
+        repaymentDay=row.repayment_day,
+        sortOrder=row.sort_order,
+        isPinned=row.is_pinned,
         isActive=row.is_active,
     )

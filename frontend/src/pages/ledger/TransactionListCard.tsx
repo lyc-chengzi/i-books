@@ -164,8 +164,8 @@ export function TransactionListCard({ title = '流水列表' }: { title?: string
   });
 
   const bankQuery = useQuery({
-    queryKey: ['bankAccounts', 'usage'],
-    queryFn: () => api.get<BankAccount[]>('/config/bank-accounts?orderBy=usage', { token: auth.token })
+    queryKey: ['bankAccounts', 'ordered'],
+    queryFn: () => api.get<BankAccount[]>('/config/bank-accounts', { token: auth.token })
   });
 
   const categoriesExpenseQuery = useQuery({
