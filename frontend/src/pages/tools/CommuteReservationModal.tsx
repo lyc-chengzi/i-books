@@ -20,7 +20,25 @@ const DIRECTION_OPTIONS: Array<{ label: Direction; value: Direction }> = [
 
 const TRAIN_OPTIONS: Record<Direction, string[]> = {
   '天津-北京南': ['C2204', 'G8952', 'C2552', 'C2002', 'C2554', 'C2004', 'C2206', 'C2208'],
-  '北京南-天津': ['C2593', 'C2595', 'C2265', 'C2267', 'C2597']
+  '北京南-天津': ['C2593', 'C2595', 'C2261', 'C2263', 'C2265', 'C2267', 'C2597']
+};
+
+const TRAIN_DEPARTURE_TIMES: Record<string, string> = {
+  C2204: '06:39',
+  G8952: '06:51',
+  C2552: '07:01',
+  C2002: '07:25',
+  C2554: '07:40',
+  C2004: '07:50',
+  C2206: '08:01',
+  C2208: '08:06',
+  C2593: '19:10',
+  C2595: '19:15',
+  C2261: '19:21',
+  C2263: '19:26',
+  C2265: '19:46',
+  C2267: '20:08',
+  C2597: '20:19'
 };
 
 const CARRIAGE_OPTIONS = Array.from({ length: 16 }, (_, index) => {
@@ -42,6 +60,15 @@ export function toTimeValue(timeLike: string) {
 
 export function getDefaultDepartureTime(direction: Direction) {
   return direction === '北京南-天津' ? '19:10' : '06:39';
+}
+
+export function getTrainDepartureTime(trainNo?: string) {
+  const normalizedTrainNo = trainNo?.trim().toUpperCase();
+  if (!normalizedTrainNo) {
+    return null;
+  }
+
+  return TRAIN_DEPARTURE_TIMES[normalizedTrainNo] ?? null;
 }
 
 function parseSeatNo(seatNo: string) {
@@ -172,20 +199,25 @@ export function CommuteReservationModal(props: {
             <Typography.Text strong>车次</Typography.Text>
             <AutoComplete
               className="commuteModalForm__control"
+              allowClear
               placeholder="可选择预置车次，也可手动输入"
               options={trainOptions}
-              value={draft.trainNo}
+              value={draft.trainNo || undefined}
               filterOption={(inputValue, option) =>
                 String(option?.value ?? '')
                   .toUpperCase()
                   .includes(inputValue.toUpperCase())
               }
-              onChange={(value) =>
+              onChange={(value) => {
+                const normalizedTrainNo = String(value).toUpperCase();
+                const mappedDepartureTime = getTrainDepartureTime(normalizedTrainNo);
+
                 onDraftChange((current) => ({
                   ...current,
-                  trainNo: String(value).toUpperCase()
-                }))
-              }
+                  trainNo: normalizedTrainNo,
+                  departureTime: mappedDepartureTime ? toTimeValue(mappedDepartureTime) : current.departureTime
+                }));
+              }}
             />
           </div>
 
