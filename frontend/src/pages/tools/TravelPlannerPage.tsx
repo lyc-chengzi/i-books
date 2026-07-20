@@ -67,22 +67,22 @@ function buildMonthCells(month: dayjs.Dayjs) {
 function getSuggestedPlan(date: dayjs.Dayjs): Pick<DayPlan, 'am' | 'pm'> {
   switch (date.day()) {
     case 1:
-      return { am: '上班 6: 51' };
+      return { am: '上班 7:25' };
     case 2:
       return {};
     case 3:
-      return { pm: '回家 19:10' };
+      return { pm: '回家 19:26' };
     case 4:
-      return { am: '上班 6: 39', pm: '回家 19:10' };
+      return { am: '上班 7:25', pm: '回家 19:26' };
     case 5:
-      return { am: '上班 6:39', pm: '回家 19:10' };
+      return { am: '上班 7:25', pm: '回家 19:26' };
     default:
       return {};
   }
 }
 
 function getTabSuggestedValue(slot: 'am' | 'pm') {
-  return slot === 'am' ? '上班 6:39' : '回家 19:10';
+  return slot === 'am' ? '上班 7:25' : '回家 19:26';
 }
 
 export function TravelPlannerPage() {

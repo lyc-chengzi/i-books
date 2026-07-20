@@ -59,7 +59,7 @@ export function toTimeValue(timeLike: string) {
 }
 
 export function getDefaultDepartureTime(direction: Direction) {
-  return direction === '北京南-天津' ? '19:10' : '06:39';
+  return direction === '北京南-天津' ? '19:26' : '07:25';
 }
 
 export function getTrainDepartureTime(trainNo?: string) {
